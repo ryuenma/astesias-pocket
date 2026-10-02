@@ -451,4 +451,17 @@
     <string name="send_to_someone_else">Kirim ke orang lain</string>
     <string name="belongs_to">Milik %1$s</string>
     <string name="change">Ubah</string>
+
+    <!-- Sinkronisasi -->
+    <string name="sync_server">Sinkronkan dengan pasangan</string>
+    <string name="sync_server_explainer">Masuk untuk berbagi daftar akun, agar transfer ke pasangan bisa menunjuk tujuan yang nyata. Kata sandi hanya dipakai sekali dan tidak pernah disimpan.</string>
+    <string name="sync_server_url_hint">Alamat server</string>
+    <string name="sync_server_email_hint">Email</string>
+    <string name="sync_server_password_hint">Kata sandi</string>
+    <string name="sync_sign_in">Hubungkan</string>
+    <string name="sync_signing_in">Menghubungkan\u2026</string>
+    <string name="sync_sign_in_failed">Gagal terhubung. Periksa alamat dan detail masuk, serta apakah server dapat dijangkau.</string>
+    <string name="sync_connected_as">Terhubung sebagai %1$s</string>
+    <string name="sync_not_connected">Belum terhubung</string>
+    <string name="sync_disconnect">Putuskan</string>
 </resources>

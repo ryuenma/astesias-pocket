@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.viewModelScope
 import com.ivy.base.legacy.SharedPrefs
+import com.ivy.data.sync.SyncConfig
 import com.ivy.base.legacy.Theme
 import com.ivy.base.legacy.refreshWidget
 import com.ivy.data.backup.BackupDataUseCase
@@ -48,6 +49,7 @@ class SettingsViewModel @Inject constructor(
     private val ivyContext: IvyWalletCtx,
     private val logoutLogic: LogoutLogic,
     private val sharedPrefs: SharedPrefs,
+    private val syncConfig: SyncConfig,
     private val backupDataUseCase: BackupDataUseCase,
     private val startDayOfMonthAct: StartDayOfMonthAct,
     private val updateStartDayOfMonthAct: UpdateStartDayOfMonthAct,
@@ -87,7 +89,9 @@ class SettingsViewModel @Inject constructor(
             startDateOfMonth = getStartDateOfMonth(),
             progressState = getProgressState(),
             hideIncome = getHideIncome(),
-            languageOptionVisible = isLanguageOptionVisible()
+            languageOptionVisible = isLanguageOptionVisible(),
+            syncBaseUrl = syncConfig.baseUrl.orEmpty(),
+            syncProfile = syncConfig.profileId
         )
     }
 
@@ -204,6 +208,23 @@ class SettingsViewModel @Inject constructor(
 
     private fun isLanguageOptionVisible(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    }
+
+    /**
+     * Connect this device to the sync server.
+     *
+     * The password is used once over the wire and never persisted; only the
+     * server's token and the resolved profile id are kept.
+     *
+     * @return the profile id on success, null on failure. The modal shows one
+     *   message rather than pretending to know whether the address, the
+     *   credentials, or an unreachable host was the wrong one.
+     */
+    suspend fun signInToSync(baseUrl: String, email: String, password: String): String? =
+        syncConfig.signIn(baseUrl, email, password)
+
+    fun disconnectSync() {
+        syncConfig.clear()
     }
 
     override fun onEvent(event: SettingsEvent) {

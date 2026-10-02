@@ -1,6 +1,7 @@
 package com.ivy.data.sync
 
 import com.ivy.base.legacy.SharedPrefs
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,6 +40,33 @@ class SyncConfig @Inject constructor(
     /** Sync only runs when all three are present. */
     val isConfigured: Boolean
         get() = baseUrl != null && authToken != null && profileId != null
+
+    /**
+     * Exchange email + password for a long-lived token.
+     *
+     * The password is used once, over the wire, and never stored. This exists so
+     * the owner types their login rather than pasting a long opaque token
+     * copied out of a server log - a pasted token is easy to get wrong, easy
+     * to leak into a screenshot, and impossible to rotate by hand.
+     *
+     * @return the resolved profileId on success, null if the server refused.
+     */
+    suspend fun signIn(baseUrl: String, email: String, password: String): String? {
+        val normalised = baseUrl.trimEnd('/')
+        if (normalised.isBlank() || email.isBlank() || password.isBlank()) return null
+        return try {
+            val response = DirectoryAuthApi.token(normalised, email, password)
+            if (response != null) {
+                sharedPrefs.putString(KEY_BASE_URL, normalised)
+                sharedPrefs.putString(KEY_TOKEN, response.token)
+                sharedPrefs.putString(KEY_PROFILE_ID, response.profileId)
+            }
+            response?.profileId
+        } catch (e: Exception) {
+            Timber.e(e, "Sync sign-in failed")
+            null
+        }
+    }
 
     fun configure(baseUrl: String, token: String, profileId: String) {
         // Normalise so callers may or may not include a trailing slash.

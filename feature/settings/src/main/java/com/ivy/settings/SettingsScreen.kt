@@ -51,6 +51,7 @@ import com.ivy.navigation.AttributionsScreen
 import com.ivy.navigation.FeaturesScreen
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.Navigation
+import com.ivy.data.sync.SyncConfig
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.ui.R
@@ -70,6 +71,7 @@ import com.ivy.wallet.ui.theme.modal.ChooseStartDateOfMonthModal
 import com.ivy.wallet.ui.theme.modal.CurrencyModal
 import com.ivy.wallet.ui.theme.modal.DeleteModal
 import com.ivy.wallet.ui.theme.modal.NameModal
+import com.ivy.wallet.ui.theme.modal.SyncServerModal
 import com.ivy.wallet.ui.theme.modal.ProgressModal
 import java.util.Locale
 
@@ -133,6 +135,14 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         },
         onSwitchLanguage = {
             viewModel.onEvent(SettingsEvent.SwitchLanguage)
+        },
+        syncBaseUrl = uiState.syncBaseUrl,
+        syncProfile = uiState.syncProfile,
+        onSyncSignIn = { url, email, password ->
+            viewModel.signInToSync(url, email, password)
+        },
+        onSyncDisconnect = {
+            viewModel.disconnectSync()
         }
     )
 }
@@ -165,10 +175,15 @@ private fun BoxWithConstraintsScope.UI(
     onSetStartDateOfMonth: (Int) -> Unit = {},
     onDeleteAllUserData: () -> Unit = {},
     onDeleteCloudUserData: () -> Unit = {},
-    onSwitchLanguage: () -> Unit = {}
+    onSwitchLanguage: () -> Unit = {},
+    syncBaseUrl: String = "",
+    syncProfile: String? = null,
+    onSyncSignIn: suspend (String, String, String) -> String? = { _, _, _ -> null },
+    onSyncDisconnect: () -> Unit = {}
 ) {
     var currencyModalVisible by remember { mutableStateOf(false) }
     var nameModalVisible by remember { mutableStateOf(false) }
+    var syncModalVisible by remember { mutableStateOf(false) }
     var chooseStartDateOfMonthVisible by remember { mutableStateOf(false) }
     var deleteCloudDataModalVisible by remember { mutableStateOf(false) }
     var deleteAllDataModalVisible by remember { mutableStateOf(false) }
@@ -226,6 +241,14 @@ private fun BoxWithConstraintsScope.UI(
             ) {
                 nameModalVisible = true
             }
+
+            Spacer(Modifier.height(12.dp))
+
+            SyncServerRow(
+                baseUrl = syncBaseUrl,
+                profile = syncProfile,
+                onClick = { syncModalVisible = true }
+            )
 
 //            Spacer(Modifier.height(20.dp))
 //            Premium()
@@ -476,6 +499,15 @@ private fun BoxWithConstraintsScope.UI(
     ) {
         onSetCurrency(it)
     }
+
+    SyncServerModal(
+        visible = syncModalVisible,
+        currentUrl = syncBaseUrl,
+        currentProfile = syncProfile,
+        dismiss = { syncModalVisible = false },
+        onSignIn = onSyncSignIn,
+        onDisconnect = onSyncDisconnect
+    )
 
     NameModal(
         visible = nameModalVisible,
@@ -733,6 +765,64 @@ private fun AppSwitch(
         }
 
         Spacer(Modifier.width(16.dp))
+    }
+}
+
+/**
+ * Settings row for the partner sync server.
+ *
+ * Shows connection state rather than hiding it: an unconfigured app that looks
+ * configured is exactly the failure that made the transfer picker confusing in
+ * the first place.
+ */
+@Composable
+private fun SyncServerRow(
+    baseUrl: String,
+    profile: String?,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(UI.shapes.r2)
+            .background(UI.colors.medium, UI.shapes.r2)
+            .clickable { onClick() }
+    ) {
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_sync_row"),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(Modifier.width(24.dp))
+
+            Text(
+                text = stringResource(R.string.sync_server),
+                style = UI.typo.c.style(
+                    fontWeight = FontWeight.Black,
+                    color = UI.colors.gray
+                )
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            text = when {
+                profile != null -> stringResource(R.string.sync_connected_as, profile)
+                baseUrl.isNotBlank() -> baseUrl
+                else -> stringResource(R.string.sync_not_connected)
+            },
+            style = UI.typo.nC.style(
+                color = if (profile != null) UI.colors.green else UI.colors.gray
+            )
+        )
+
+        Spacer(Modifier.height(16.dp))
     }
 }
 

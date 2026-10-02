@@ -495,4 +495,17 @@
     <string name="send_to_someone_else">Send to someone else</string>
     <string name="belongs_to">Belongs to %1$s</string>
     <string name="change">Change</string>
+
+    <!-- Sync server -->
+    <string name="sync_server">Sync with your partner</string>
+    <string name="sync_server_explainer">Sign in to share your account list, so a transfer to them can name a real destination. Your password is used once and never stored.</string>
+    <string name="sync_server_url_hint">Server address</string>
+    <string name="sync_server_email_hint">Email</string>
+    <string name="sync_server_password_hint">Password</string>
+    <string name="sync_sign_in">Connect</string>
+    <string name="sync_signing_in">Connecting\u2026</string>
+    <string name="sync_sign_in_failed">Could not connect. Check the address and sign-in details, and that the server is reachable.</string>
+    <string name="sync_connected_as">Connected as %1$s</string>
+    <string name="sync_not_connected">Not connected</string>
+    <string name="sync_disconnect">Disconnect</string>
 </resources>

@@ -27,6 +27,7 @@ import com.ivy.data.model.TransactionId
 import com.ivy.data.model.primitive.AssociationId
 import com.ivy.data.model.primitive.NotBlankTrimmedString
 import com.ivy.data.profile.DirectoryRepository
+import com.ivy.data.sync.DirectorySyncRepository
 import com.ivy.data.profile.ProfileId
 import com.ivy.data.repository.CategoryRepository
 import com.ivy.data.repository.TagRepository
@@ -89,6 +90,7 @@ class EditTransactionViewModel @Inject constructor(
     private val context: Context,
     private val toaster: Toaster,
     private val directoryRepository: DirectoryRepository,
+    private val directorySync: DirectorySyncRepository,
     private val loanDao: LoanDao,
     private val settingsDao: SettingsDao,
     private val nav: Navigation,
@@ -128,31 +130,38 @@ class EditTransactionViewModel @Inject constructor(
     private var toAccount by mutableStateOf<Account?>(null)
     private var toDirectoryAccount by mutableStateOf<DirectoryAccountEntity?>(null)
 
+    /** Other profiles' accounts, for the destination picker. */
+    private var directoryAccounts by mutableStateOf(listOf<DirectoryAccountEntity>().toImmutableList())
+
     /**
      * Loads the accounts published by other profiles.
      *
      * Failure is swallowed on purpose: an unreachable sync must not block recording a
      * transfer that already happened, and the picker shows an honest empty state.
      */
+    /**
+     * Show cached accounts immediately, then refresh in the background.
+     *
+     * Two steps on purpose: the picker must never block on the network, because
+     * the transfer being recorded already happened and the owner is waiting. A
+     * slow or dead server therefore degrades to "the accounts I saw last time",
+     * never to a spinner.
+     */
     fun loadDirectory() {
         viewModelScope.launch {
-            directoryAccounts = try {
-                directoryRepository.others(ProfileId.DEFAULT).toImmutableList()
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to load the account directory")
-                listOf<DirectoryAccountEntity>().toImmutableList()
+            directoryAccounts = directoryRepository.others(ProfileId.DEFAULT).toImmutableList()
+        }
+        viewModelScope.launch {
+            val refreshed = directorySync.refresh()
+            // Re-read from the DAO rather than trusting the sync result: the
+            // repository may have refreshed profiles that are not mine, and the
+            // query that excludes my own account is the only thing that knows
+            // which rows belong in this picker.
+            if (refreshed) {
+                directoryAccounts = directoryRepository.others(ProfileId.DEFAULT).toImmutableList()
             }
         }
     }
-    /**
-     * Accounts published by other profiles.
-     *
-     * Empty until sync delivers a directory, which is why [DirectoryAccountPicker]
-     * states that cause rather than showing a blank list. Deliberately not injected
-     * yet: there is no writer for it, and wiring a data source the sync layer has
-     * yet to fill would only hide that.
-     */
-    private var directoryAccounts by mutableStateOf(listOf<DirectoryAccountEntity>().toImmutableList())
 
     private var category by mutableStateOf<Category?>(null)
     private var amount by mutableDoubleStateOf(0.0)
