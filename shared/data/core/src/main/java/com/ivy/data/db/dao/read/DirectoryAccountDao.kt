@@ -10,6 +10,11 @@ import com.ivy.data.db.entity.DirectoryAccountEntity
  * Other profiles' accounts, published so a transfer can name a destination.
  *
  * Contains no balances and no transactions - see [DirectoryAccountEntity].
+ *
+ * Deliberately a pure interface: composing the set ([replaceProfile]) lives in
+ * [com.ivy.data.profile.DirectoryRepository]. A default method here would drag
+ * Room's annotations into every consumer's signature, and this module exposes
+ * Room as `implementation`, so the annotation is not on a consumer's classpath.
  */
 @Dao
 interface DirectoryAccountDao {
@@ -23,20 +28,6 @@ interface DirectoryAccountDao {
 
     @Query("SELECT * FROM directory_accounts WHERE accountId = :accountId LIMIT 1")
     suspend fun findByAccountId(accountId: String): DirectoryAccountEntity?
-
-    /**
-     * Replaces one profile's published accounts with the current set.
-     *
-     * Delete-then-insert rather than upsert: an account she deleted must DISAPPEAR
-     * from my list, and an upsert-only sync would leave it selectable forever. The
-     * whole set is rewritten inside one transaction so a partial sync can never
-     * leave me with half her accounts.
-     */
-    @androidx.room.Transaction
-    suspend fun replaceProfile(profileId: String, accounts: List<DirectoryAccountEntity>) {
-        deleteProfile(profileId)
-        if (accounts.isNotEmpty()) insertAll(accounts)
-    }
 
     @Query("DELETE FROM directory_accounts WHERE profileId = :profileId")
     suspend fun deleteProfile(profileId: String)

@@ -44,6 +44,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.legacy.datamodel.Account
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
@@ -103,6 +104,13 @@ fun BoxWithConstraintsScope.EditBottomSheet(
     accounts: List<Account>,
     selectedAccount: Account?,
     toAccount: Account?,
+    /**
+     * Cross-profile transfer destination. Null until one is picked, and null on
+     * every non-transfer screen, so the "To" row is unchanged by default.
+     */
+    toDirectoryAccount: DirectoryAccountEntity? = null,
+    onPickDirectoryDestination: (() -> Unit)? = null,
+    onClearDirectoryDestination: (() -> Unit)? = null,
     amount: Double,
     currency: String,
     amountModalShown: Boolean,
@@ -212,7 +220,10 @@ fun BoxWithConstraintsScope.EditBottomSheet(
             toAccount = toAccount,
             onSelectedAccountChanged = onSelectedAccountChanged,
             onToAccountChanged = onToAccountChanged,
-            onAddNewAccount = onAddNewAccount
+            onAddNewAccount = onAddNewAccount,
+            toDirectoryAccount = toDirectoryAccount,
+            onPickDirectoryDestination = onPickDirectoryDestination,
+            onClearDirectoryDestination = onClearDirectoryDestination,
         )
 
         val spacerAboveAmount = lerp(40, 16, percentCollapsed)
@@ -447,6 +458,54 @@ private fun TransferRowMini(
     }
 }
 
+/**
+ * Shows the chosen account on another profile, with a way back out.
+ *
+ * States its owner ("Ratna's Mandiri") because the same account name can exist on
+ * both profiles, and picking the wrong one is the failure that actually costs
+ * money.
+ */
+@Composable
+private fun DirectoryDestinationRow(
+    entry: DirectoryAccountEntity,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.name,
+                style = UI.typo.b2.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+            Text(
+                text = stringResource(R.string.belongs_to, entry.profileName),
+                style = UI.typo.c.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.Medium,
+                ),
+            )
+        }
+        Text(
+            modifier = Modifier
+                .clip(UI.shapes.r4)
+                .clickable(onClick = onClear)
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+            text = stringResource(R.string.change),
+            style = UI.typo.c.style(
+                color = UI.colors.pureInverse,
+                fontWeight = FontWeight.Bold,
+            ),
+        )
+    }
+}
+
 @Composable
 @Suppress("ParameterNaming")
 private fun SheetHeader(
@@ -459,6 +518,9 @@ private fun SheetHeader(
     onSelectedAccountChanged: (Account) -> Unit,
     onToAccountChanged: (Account) -> Unit,
     onAddNewAccount: () -> Unit,
+    toDirectoryAccount: DirectoryAccountEntity?,
+    onPickDirectoryDestination: (() -> Unit)?,
+    onClearDirectoryDestination: (() -> Unit)?,
 ) {
     if (percentExpanded > 0.01f) {
         Column(
@@ -513,13 +575,38 @@ private fun SheetHeader(
 
                 Spacer(Modifier.height(8.dp))
 
-                AccountsRow(
-                    accounts = accounts,
-                    selectedAccount = toAccount,
-                    onSelectedAccountChanged = onToAccountChanged,
-                    onAddNewAccount = onAddNewAccount,
-                    childrenTestTag = "to_account",
-                )
+                if (toDirectoryAccount != null) {
+                    DirectoryDestinationRow(
+                        entry = toDirectoryAccount,
+                        onClear = { onClearDirectoryDestination?.invoke() },
+                    )
+                } else {
+                    AccountsRow(
+                        accounts = accounts,
+                        selectedAccount = toAccount,
+                        onSelectedAccountChanged = onToAccountChanged,
+                        onAddNewAccount = onAddNewAccount,
+                        childrenTestTag = "to_account",
+                    )
+
+                    // Offered alongside the local row, not instead of it: moving
+                    // money between two of my accounts stays the common case.
+                    if (onPickDirectoryDestination != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            modifier = Modifier
+                                .padding(start = 32.dp)
+                                .clip(UI.shapes.r4)
+                                .clickable { onPickDirectoryDestination.invoke() }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            text = stringResource(R.string.send_to_someone_else),
+                            style = UI.typo.c.style(
+                                color = UI.colors.pureInverse,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                        )
+                    }
+                }
             }
         }
     }

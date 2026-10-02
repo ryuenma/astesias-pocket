@@ -2,6 +2,7 @@ package com.ivy.transaction
 
 import androidx.compose.runtime.Immutable
 import com.ivy.base.model.TransactionType
+import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.Tag
 import com.ivy.data.model.TagId
@@ -35,7 +36,20 @@ data class EditTransactionViewState(
     val backgroundProcessingStarted: Boolean,
     val customExchangeRateState: CustomExchangeRateState,
     val tags: ImmutableList<Tag>,
-    val transactionAssociatedTags: ImmutableList<TagId>
+    val transactionAssociatedTags: ImmutableList<TagId>,
+    /**
+     * Accounts belonging to OTHER profiles, for a cross-profile transfer.
+     * Empty until this device has synced with theirs.
+     */
+    val directoryAccounts: ImmutableList<DirectoryAccountEntity>,
+    /**
+     * Set when the destination is one of their accounts rather than one of mine.
+     *
+     * Kept separate from [toAccount] rather than folded into it: a directory entry
+     * is not one of my accounts, so pretending otherwise would put a real foreign
+     * account into a list the rest of the screen assumes it owns.
+     */
+    val toDirectoryAccount: DirectoryAccountEntity?,
 )
 
 sealed interface EditTransactionViewEvent {
@@ -45,6 +59,8 @@ sealed interface EditTransactionViewEvent {
     data class OnCategoryChanged(val newCategory: Category?) : EditTransactionViewEvent
     data class OnAccountChanged(val newAccount: Account) : EditTransactionViewEvent
     data class OnToAccountChanged(val newAccount: Account) : EditTransactionViewEvent
+    data class OnToDirectoryAccountChanged(val entry: DirectoryAccountEntity) : EditTransactionViewEvent
+    data object OnClearDirectoryDestination : EditTransactionViewEvent
     data class OnDueDateChanged(val newDueDate: LocalDateTime?) : EditTransactionViewEvent
     data object OnChangeDate : EditTransactionViewEvent
     data object OnChangeTime : EditTransactionViewEvent

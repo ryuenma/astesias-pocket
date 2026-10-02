@@ -18,6 +18,7 @@ import com.ivy.base.time.TimeConverter
 import com.ivy.base.time.TimeProvider
 import com.ivy.data.db.dao.read.LoanDao
 import com.ivy.data.db.dao.read.SettingsDao
+import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.CategoryId
 import com.ivy.data.model.Tag
@@ -74,6 +75,7 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
+import timber.log.Timber
 import javax.inject.Inject
 
 @Suppress("LargeClass")
@@ -121,6 +123,16 @@ class EditTransactionViewModel @Inject constructor(
     private var transactionAssociatedTags by mutableStateOf<ImmutableList<TagId>>(persistentListOf())
     private var account by mutableStateOf<Account?>(null)
     private var toAccount by mutableStateOf<Account?>(null)
+    private var toDirectoryAccount by mutableStateOf<DirectoryAccountEntity?>(null)
+    /**
+     * Accounts published by other profiles.
+     *
+     * Empty until sync delivers a directory, which is why [DirectoryAccountPicker]
+     * states that cause rather than showing a blank list. Deliberately not injected
+     * yet: there is no writer for it, and wiring a data source the sync layer has
+     * yet to fill would only hide that.
+     */
+    private var directoryAccounts by mutableStateOf(listOf<DirectoryAccountEntity>().toImmutableList())
     private var category by mutableStateOf<Category?>(null)
     private var amount by mutableDoubleStateOf(0.0)
     private var hasChanges by mutableStateOf(false)
@@ -206,7 +218,9 @@ class EditTransactionViewModel @Inject constructor(
             backgroundProcessingStarted = getBackgroundProcessingStarted(),
             customExchangeRateState = getCustomExchangeRateState(),
             tags = getTags(),
-            transactionAssociatedTags = getTransactionAssociatedTags()
+            transactionAssociatedTags = getTransactionAssociatedTags(),
+            directoryAccounts = directoryAccounts,
+            toDirectoryAccount = toDirectoryAccount,
         )
     }
 
@@ -332,6 +346,10 @@ class EditTransactionViewModel @Inject constructor(
 
             is EditTransactionViewEvent.OnTitleChanged -> onTitleChanged(event.newTitle)
             is EditTransactionViewEvent.OnToAccountChanged -> onToAccountChanged(event.newAccount)
+            is EditTransactionViewEvent.OnToDirectoryAccountChanged ->
+                onToDirectoryAccountChanged(event.entry)
+            EditTransactionViewEvent.OnClearDirectoryDestination ->
+                onClearDirectoryDestination()
             is EditTransactionViewEvent.Save -> save(event.closeScreen)
             is EditTransactionViewEvent.SetHasChanges -> setHasChanges(event.hasChangesValue)
             is EditTransactionViewEvent.UpdateExchangeRate -> updateExchangeRate(event.exRate)
@@ -514,6 +532,32 @@ class EditTransactionViewModel @Inject constructor(
 
     private suspend fun updateCurrency(account: Account) {
         currency = account.currency ?: baseCurrency()
+    }
+
+    /**
+     * Loads accounts published by other profiles.
+     *
+     * Called when the transfer screen opens. Returns nothing on failure rather
+     * than surfacing an error: an unreachable sync must not block recording a
+     * transfer that already happened, and the picker shows an honest empty state.
+     */
+    private fun onToDirectoryAccountChanged(entry: DirectoryAccountEntity) {
+        toDirectoryAccount = entry
+        // Mutually exclusive with a local destination: the transfer goes to ONE
+        // account, and leaving both set would make it ambiguous which one won.
+        toAccount = null
+        setHasChanges(true)
+
+        // No local destination remains, so there is no local currency to convert
+        // from; the rate card must be dismissed rather than left stale.
+        viewModelScope.launch {
+            updateCustomExchangeRateState(toAccountValue = null)
+        }
+    }
+
+    private fun onClearDirectoryDestination() {
+        toDirectoryAccount = null
+        setHasChanges(true)
     }
 
     private fun onToAccountChanged(newAccount: Account) {

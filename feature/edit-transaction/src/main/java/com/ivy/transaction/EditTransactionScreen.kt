@@ -1,6 +1,7 @@
 package com.ivy.transaction
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ivy.base.legacy.Theme
 import com.ivy.base.model.TransactionType
+import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.Tag
 import com.ivy.data.model.TagId
@@ -72,6 +74,7 @@ import com.ivy.wallet.ui.theme.modal.ModalAdd
 import com.ivy.wallet.ui.theme.modal.ModalCheck
 import com.ivy.wallet.ui.theme.modal.ModalSave
 import com.ivy.wallet.ui.theme.modal.ProgressModal
+import com.ivy.transaction.directory.DirectoryAccountPicker
 import com.ivy.wallet.ui.theme.modal.edit.AccountModal
 import com.ivy.wallet.ui.theme.modal.edit.AccountModalData
 import com.ivy.wallet.ui.theme.modal.edit.AmountModal
@@ -112,6 +115,14 @@ fun BoxWithConstraintsScope.EditTransactionScreen(screen: EditTransactionScreen)
         category = uiState.category,
         account = uiState.account,
         toAccount = uiState.toAccount,
+        toDirectoryAccount = uiState.toDirectoryAccount,
+        directoryAccounts = uiState.directoryAccounts,
+        onClearDirectoryDestination = {
+            viewModel.onEvent(EditTransactionViewEvent.OnClearDirectoryDestination)
+        },
+        onDirectorySelected = {
+            viewModel.onEvent(EditTransactionViewEvent.OnToDirectoryAccountChanged(it))
+        },
         dueDate = uiState.dueDate,
         amount = uiState.amount,
         loanData = uiState.displayLoanHelper,
@@ -201,8 +212,12 @@ private fun BoxWithConstraintsScope.UI(
     dateTime: Instant?,
     account: Account?,
     toAccount: Account?,
+    toDirectoryAccount: DirectoryAccountEntity?,
     dueDate: Instant?,
     amount: Double,
+    directoryAccounts: ImmutableList<DirectoryAccountEntity>,
+    onClearDirectoryDestination: () -> Unit,
+    onDirectorySelected: (DirectoryAccountEntity) -> Unit,
 
     customExchangeRateState: CustomExchangeRateState,
     categories: ImmutableList<Category>,
@@ -239,6 +254,7 @@ private fun BoxWithConstraintsScope.UI(
     var tagModelVisible by remember { mutableStateOf(false) }
     var categoryModalData: CategoryModalData? by remember { mutableStateOf(null) }
     var accountModalData: AccountModalData? by remember { mutableStateOf(null) }
+    var directoryPickerVisible by remember { mutableStateOf(false) }
     var descriptionModalVisible by remember { mutableStateOf(false) }
     var deleteTrnModalVisible by remember { mutableStateOf(false) }
     var changeTransactionTypeModalVisible by remember { mutableStateOf(false) }
@@ -441,6 +457,9 @@ private fun BoxWithConstraintsScope.UI(
         accounts = accounts,
         selectedAccount = account,
         toAccount = toAccount,
+        toDirectoryAccount = toDirectoryAccount,
+        onPickDirectoryDestination = { directoryPickerVisible = true },
+        onClearDirectoryDestination = onClearDirectoryDestination,
         amount = amount,
         currency = baseCurrency,
         convertedAmount = customExchangeRateState.convertedAmount,
@@ -539,6 +558,16 @@ private fun BoxWithConstraintsScope.UI(
     }, onEditCategory = onEditCategory, dismiss = {
         categoryModalData = null
     })
+
+    DirectoryAccountPicker(
+        visible = directoryPickerVisible,
+        accounts = directoryAccounts,
+        onSelect = { entry ->
+            onDirectorySelected(entry)
+            directoryPickerVisible = false
+        },
+        onDismiss = { directoryPickerVisible = false },
+    )
 
     AccountModal(
         modal = accountModalData,
@@ -700,7 +729,11 @@ private fun BoxWithConstraintsScope.Preview(isDark: Boolean = false) {
             onCreateAccount = { },
             onSetDate = {},
             onSetTime = {},
-            onSetTransactionType = {}
+            onSetTransactionType = {},
+            toDirectoryAccount = null,
+            directoryAccounts = persistentListOf(),
+            onClearDirectoryDestination = {},
+            onDirectorySelected = {},
         )
     }
 }

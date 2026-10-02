@@ -488,4 +488,11 @@
     <string name="name_this_profile">Name this profile</string>
     <string name="name_this_profile_description">This wallet belongs to one person. The name is how you tell your profile apart from the other one on this phone.</string>
     <string name="profile_name">Profile name</string>
+    <string name="send_to">Send to</string>
+    <string name="send_to_description">Pick which of their accounts this goes into. The same transfer is recorded on their side.</string>
+    <string name="no_other_accounts_yet">No other profiles yet</string>
+    <string name="no_other_accounts_yet_description">This device hasn’t received any account list from the other phone yet. Once it syncs, their accounts appear here.</string>
+    <string name="send_to_someone_else">Send to someone else</string>
+    <string name="belongs_to">Belongs to %1$s</string>
+    <string name="change">Change</string>
 </resources>

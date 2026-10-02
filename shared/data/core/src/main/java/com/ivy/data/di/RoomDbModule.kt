@@ -2,10 +2,12 @@ package com.ivy.data.di
 
 import android.content.Context
 import com.ivy.data.db.IvyRoomDatabase
+import com.ivy.data.profile.ActiveProfileId
 import com.ivy.data.profile.ProfileRegistry
 import com.ivy.data.db.dao.read.AccountDao
 import com.ivy.data.db.dao.read.BudgetDao
 import com.ivy.data.db.dao.read.CategoryDao
+import com.ivy.data.db.dao.read.DirectoryAccountDao
 import com.ivy.data.db.dao.read.ExchangeRatesDao
 import com.ivy.data.db.dao.read.LoanDao
 import com.ivy.data.db.dao.read.LoanRecordDao
@@ -45,6 +47,15 @@ object RoomDbModule {
      * below is derived from the same instance, which is what makes the profile
      * boundary hold for all of them at once.
      */
+    /**
+     * The active profile id, bound once for feature modules that only need it to
+     * exclude their own rows from a query.
+     */
+    @Provides
+    @ActiveProfileId
+    fun provideActiveProfileId(profileRegistry: ProfileRegistry): String =
+        profileRegistry.activeProfileId().value
+
     @Provides
     @Singleton
     fun provideIvyRoomDatabase(
@@ -111,6 +122,17 @@ object RoomDbModule {
     fun provideTagAssociationDao(db: IvyRoomDatabase): TagAssociationDao {
         return db.tagAssociationDao
     }
+
+    @Provides
+    fun provideDirectoryAccountDao(db: IvyRoomDatabase): DirectoryAccountDao {
+        return db.directoryAccountDao
+    }
+
+    @Provides
+    fun provideDirectoryRepository(
+        directoryAccountDao: DirectoryAccountDao,
+    ): com.ivy.data.profile.DirectoryRepository =
+        com.ivy.data.profile.DirectoryRepository(directoryAccountDao)
 
     @Provides
     fun provideExchangeRatesDao(

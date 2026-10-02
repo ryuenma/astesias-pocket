@@ -444,4 +444,11 @@
     <string name="name_this_profile">Beri nama profil ini</string>
     <string name="name_this_profile_description">Dompet ini milik satu orang. Nama ini untuk membedakan profil Anda dari profil lain di ponsel ini.</string>
     <string name="profile_name">Nama profil</string>
+    <string name="send_to">Kirim ke</string>
+    <string name="send_to_description">Pilih rekening mereka yang akan menerima. Transfer yang sama tercatat di sisi mereka.</string>
+    <string name="no_other_accounts_yet">Belum ada profil lain</string>
+    <string name="no_other_accounts_yet_description">Perangkat ini belum menerima daftar rekening dari ponsel lain. Setelah sinkron, rekening mereka akan muncul di sini.</string>
+    <string name="send_to_someone_else">Kirim ke orang lain</string>
+    <string name="belongs_to">Milik %1$s</string>
+    <string name="change">Ubah</string>
 </resources>
