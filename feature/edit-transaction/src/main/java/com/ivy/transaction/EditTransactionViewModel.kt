@@ -26,6 +26,8 @@ import com.ivy.data.model.TagId
 import com.ivy.data.model.TransactionId
 import com.ivy.data.model.primitive.AssociationId
 import com.ivy.data.model.primitive.NotBlankTrimmedString
+import com.ivy.data.profile.DirectoryRepository
+import com.ivy.data.profile.ProfileId
 import com.ivy.data.repository.CategoryRepository
 import com.ivy.data.repository.TagRepository
 import com.ivy.data.repository.TransactionRepository
@@ -86,6 +88,7 @@ class EditTransactionViewModel @Inject constructor(
     @ApplicationContext
     private val context: Context,
     private val toaster: Toaster,
+    private val directoryRepository: DirectoryRepository,
     private val loanDao: LoanDao,
     private val settingsDao: SettingsDao,
     private val nav: Navigation,
@@ -124,6 +127,23 @@ class EditTransactionViewModel @Inject constructor(
     private var account by mutableStateOf<Account?>(null)
     private var toAccount by mutableStateOf<Account?>(null)
     private var toDirectoryAccount by mutableStateOf<DirectoryAccountEntity?>(null)
+
+    /**
+     * Loads the accounts published by other profiles.
+     *
+     * Failure is swallowed on purpose: an unreachable sync must not block recording a
+     * transfer that already happened, and the picker shows an honest empty state.
+     */
+    fun loadDirectory() {
+        viewModelScope.launch {
+            directoryAccounts = try {
+                directoryRepository.others(ProfileId.DEFAULT).toImmutableList()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load the account directory")
+                listOf<DirectoryAccountEntity>().toImmutableList()
+            }
+        }
+    }
     /**
      * Accounts published by other profiles.
      *
@@ -133,6 +153,7 @@ class EditTransactionViewModel @Inject constructor(
      * yet to fill would only hide that.
      */
     private var directoryAccounts by mutableStateOf(listOf<DirectoryAccountEntity>().toImmutableList())
+
     private var category by mutableStateOf<Category?>(null)
     private var amount by mutableDoubleStateOf(0.0)
     private var hasChanges by mutableStateOf(false)

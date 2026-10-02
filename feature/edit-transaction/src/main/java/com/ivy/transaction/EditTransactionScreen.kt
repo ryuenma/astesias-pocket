@@ -102,6 +102,12 @@ fun BoxWithConstraintsScope.EditTransactionScreen(screen: EditTransactionScreen)
         viewModel.start(screen)
     }
 
+    // Directory load is separate from start(): start() decides whether this is a new or
+    // existing transaction, the directory is needed either way.
+    LaunchedEffect(Unit) {
+        viewModel.loadDirectory()
+    }
+
     val view = LocalView.current
 
     UI(
