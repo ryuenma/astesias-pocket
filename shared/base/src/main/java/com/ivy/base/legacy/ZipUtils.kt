@@ -79,8 +79,19 @@ fun unzip(fileInputStream: FileInputStream, location: File) {
         var unzipFile: File
         var unzipParentDir: File?
 
+        val rootCanonical = File(locationPath).canonicalFile
+
         while (zipInputStream.nextEntry.also { zipEntry = it } != null) {
             unzipFile = File(locationPath + zipEntry!!.name)
+            // Zip Slip guard: an entry named "../../evil" would otherwise write
+            // outside the cache dir. Low risk for a personal sideloaded build, but
+            // this is a backup file the user picked off their device, so treat it as
+            // untrusted input and refuse anything that escapes the target folder.
+            if (!unzipFile.canonicalFile.path.startsWith(rootCanonical.path + File.separator)) {
+                throw IllegalStateException(
+                    "Refusing zip entry outside the target directory: ${zipEntry!!.name}"
+                )
+            }
             if (zipEntry!!.isDirectory) {
                 if (!unzipFile.isDirectory) unzipFile.mkdirs()
             } else {

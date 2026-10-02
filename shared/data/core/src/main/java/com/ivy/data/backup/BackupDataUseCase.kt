@@ -149,21 +149,56 @@ class BackupDataUseCase @Inject constructor(
         onProgress: suspend (progressPercent: Double) -> Unit
     ): ImportResult = withContext(dispatchersProvider.io) {
         return@withContext try {
-            val jsonString = try {
+            // Prefer the zip. If that fails the file may be a bare .json, so fall
+            // back to reading it directly -- but decode by BOM, not a forced
+            // UTF_16. The old fallback decoded raw ZIP bytes as UTF-16 text, which
+            // is guaranteed garbage and then fed to importJson.
+            var readFailure: String? = null
+            val jsonString: String? = try {
                 extractAndReadBackupZip(backupFileUri, onProgress)
-            } catch (e: Exception) {
-                fileSystem.read(backupFileUri, Charsets.UTF_16).getOrNull()
-            } ?: ""
+            } catch (zipError: Exception) {
+                Timber.w("Not a readable zip, trying as a raw backup file: $zipError")
+                fileSystem.read(backupFileUri).getOrNull().also {
+                    if (it == null) {
+                        readFailure = "Could not read the backup. As a zip: " +
+                            "${zipError.message ?: zipError::class.java.simpleName}. " +
+                            "As a plain file: the content was unreadable or empty."
+                    }
+                }
+            }
 
-            importJson(jsonString, onProgress, clearCacheDir = true)
+            if (readFailure != null) {
+                ImportResult(
+                    rowsFound = 0,
+                    transactionsImported = 0,
+                    accountsImported = 0,
+                    categoriesImported = 0,
+                    failedRows = persistentListOf(),
+                    errorMessage = readFailure
+                )
+            } else if (jsonString.isNullOrBlank()) {
+                ImportResult(
+                    rowsFound = 0,
+                    transactionsImported = 0,
+                    accountsImported = 0,
+                    categoriesImported = 0,
+                    failedRows = persistentListOf(),
+                    errorMessage = "The backup file is empty."
+                )
+            } else {
+                importJson(jsonString, onProgress, clearCacheDir = true)
+            }
         } catch (e: Exception) {
+            // Previously swallowed into an all-zero result, so a corrupt or
+            // wrongly-encoded backup reported "0 imported" with no reason given.
             Timber.e("Import error: $e")
             ImportResult(
                 rowsFound = 0,
                 transactionsImported = 0,
                 accountsImported = 0,
                 categoriesImported = 0,
-                failedRows = persistentListOf()
+                failedRows = persistentListOf(),
+                errorMessage = e.message ?: e::class.java.simpleName
             )
         } finally {
             dataObserver.post(DataWriteEvent.AllDataChange)
@@ -197,7 +232,8 @@ class BackupDataUseCase @Inject constructor(
             error("Didn't unzip exactly one file.")
         }
 
-        return fileSystem.read(filesList[0].toUri(), Charsets.UTF_16).getOrNull()
+        // No forced charset: Ivy wrote UTF-16, but a UTF-8 backup must work too.
+        return fileSystem.read(filesList[0].toUri()).getOrNull()
     }
 
     suspend fun importJson(
