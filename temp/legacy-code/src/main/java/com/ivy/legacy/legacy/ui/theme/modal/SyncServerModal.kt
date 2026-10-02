@@ -39,14 +39,11 @@ import com.ivy.wallet.ui.theme.components.IvyTitleTextField
 import java.util.UUID
 
 /**
- * Connects this device to the owner's sync server.
+ * Connects this device to the sync server. See [SyncConfig] for why this asks
+ * for a login rather than a token.
  *
- * Asks for a login rather than a pasted token. A token is long, easy to
- * mis-copy, easy to leak into a screenshot, and impossible for the owner to
- * rotate by hand - the password is used once over the wire and never stored.
- *
- * The password is cleared the instant it is handed to [onSignIn], so it does not
- * linger in a recomposed snapshot while the request is in flight.
+ * The password is cleared the instant it is handed to [onSignIn], so it never
+ * sits in a recomposed snapshot while the request is in flight.
  */
 @Deprecated("Old design system. Use `:ivy-design` and Material3")
 @Suppress("ParameterNaming")

@@ -8,13 +8,12 @@ import javax.inject.Singleton
 /**
  * Where the sync server lives and who this device is.
  *
- * Deliberately unconfigured by default. A wrong hardcoded URL is worse than no
- * URL: it turns a clear "sync is not set up yet" into a confusing network
- * error, and it risks pointing the owner's real ledger at a host he did not
- * intend.
+ * Unconfigured by default: a wrong URL is worse than none, because it turns a
+ * clear "not set up yet" into a confusing network error.
  *
- * Credentials are stored as a token only. The password is never persisted -
- * the server issues a long-lived auth token and that is the whole secret.
+ * The password is never persisted. The server's long-lived token is the whole
+ * secret, so asking for a login rather than a pasted token costs nothing and
+ * keeps a long opaque string out of screenshots and shell history.
  */
 @Singleton
 class SyncConfig @Inject constructor(

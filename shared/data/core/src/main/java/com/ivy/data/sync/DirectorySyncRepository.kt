@@ -10,14 +10,9 @@ import timber.log.Timber
 /**
  * Pulls the shared account directory into the local cache.
  *
- * This is the writer that makes the transfer picker's empty state become real.
- * Until it runs, the picker honestly reports that no other profile's accounts
- * have arrived; after it runs, it lists them.
- *
- * Refresh is replace-per-profile rather than wholesale: an account she renamed
- * should update in place, and an account she deleted server-side should
- * disappear, without ever touching rows belonging to profiles this device did
- * not just refresh.
+ * Refresh is replace-per-profile, never wholesale, and only for profiles
+ * actually present in the response. Clearing everything on a short response
+ * would blank a working picker because one request came back incomplete.
  */
 @Singleton
 class DirectorySyncRepository @Inject constructor(
