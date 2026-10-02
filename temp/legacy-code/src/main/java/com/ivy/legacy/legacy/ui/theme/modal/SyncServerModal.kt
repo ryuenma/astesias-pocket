@@ -60,16 +60,28 @@ fun BoxWithConstraintsScope.SyncServerModal(
     onSignIn: suspend (baseUrl: String, email: String, password: String) -> String?,
     onDisconnect: () -> Unit,
 ) {
-    var url by remember(id) { mutableStateOf(currentUrl) }
-    var email by remember(id) { mutableStateOf("") }
-    var password by remember(id) { mutableStateOf("") }
-    var working by remember(id) { mutableStateOf(false) }
-    var failure by remember(id) { mutableStateOf(false) }
+    // STABLE identity for the remember keys.
+    //
+    // The `id` parameter defaults to UUID.randomUUID(), which is re-evaluated on
+    // EVERY recomposition because the caller does not pass one. Keying remember()
+    // on that value means each keystroke changes the key, the remembered state is
+    // discarded, and the character vanishes the instant it is typed - the field
+    // takes focus and silently swallows everything.
+    //
+    // The parameter is still used for IvyModal, which needs it for animation, but
+    // it must never be a state key.
+    val stateKey = remember { UUID.randomUUID() }
+
+    var url by remember(stateKey) { mutableStateOf(currentUrl) }
+    var email by remember(stateKey) { mutableStateOf("") }
+    var password by remember(stateKey) { mutableStateOf("") }
+    var working by remember(stateKey) { mutableStateOf(false) }
+    var failure by remember(stateKey) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // A screen that survives a rotation must not restore a password into a text
     // field, so the secret is dropped whenever the modal goes away.
-    LaunchedEffect(visible) {
+    LaunchedEffect(visible, stateKey) {
         if (!visible) {
             password = ""
             failure = false
@@ -141,7 +153,15 @@ fun BoxWithConstraintsScope.SyncServerModal(
         Field(
             value = email,
             hint = stringResource(R.string.sync_server_email_hint),
-            keyboard = KeyboardType.Email,
+            // Deliberately KeyboardType.Text, NOT KeyboardType.Email.
+            //
+            // Some IMEs (Gboard included) render an "email" layout that hides the
+            // letter keys behind an abc toggle, so the field looks like it accepts
+            // nothing at all: focus lands in it, keystrokes go nowhere visible, and
+            // it reads as a broken field rather than an unfamiliar keyboard.
+            // A plain keyboard with autocorrect off types reliably everywhere and
+            // costs nothing here - the server validates the address regardless.
+            keyboard = KeyboardType.Text,
             capitalization = KeyboardCapitalization.None,
             errorReset = { failure = false },
             onChange = { email = it }
