@@ -36,11 +36,31 @@ object DirectoryAuthApi {
     data class Credentials(val token: String, val profileId: String, val displayName: String)
 
     /**
-     * @return credentials on success, null when the server refuses. A wrong
-     *   password and an unreachable host both return null; the caller shows one
-     *   message rather than pretending to know which happened.
+     * WHY this is typed rather than returning null on every failure:
+     *
+     * "Could not connect" was actively misleading. It blamed the network when the
+     * real cause was "that account does not exist", and it cost several rounds of
+     * guessing before anyone checked whether the profiles had been seeded at all.
+     * The owner-facing message must name the actual cause.
      */
-    suspend fun token(baseUrl: String, email: String, password: String): Credentials? {
+    enum class Outcome {
+        /** Signed in; [Credentials] is populated. */
+        SUCCESS,
+
+        /** The host could not be reached at all - DNS, TLS, timeout, no network. */
+        UNREACHABLE,
+
+        /** The server answered, and refused these credentials. */
+        BAD_CREDENTIALS,
+
+        /** The server answered, but not with something we understand. */
+        SERVER_ERROR,
+    }
+
+    data class Result(val outcome: Outcome, val credentials: Credentials? = null, val httpStatus: Int = 0)
+
+    /** @return the outcome, never null, so the caller can explain rather than shrug. */
+    suspend fun token(baseUrl: String, email: String, password: String): Result {
         val client = HttpClient(OkHttp) {
             install(HttpTimeout) {
                 requestTimeoutMillis = 20_000
@@ -58,18 +78,31 @@ object DirectoryAuthApi {
             }
             if (response.status != HttpStatusCode.OK) {
                 Timber.w("Sync sign-in refused: HTTP ${response.status}")
-                return null
+                return Result(
+                    // 400 from PocketBase means the identity/password pair did not
+                    // match. That is the signature of "profile was never seeded",
+                    // which is the single most likely cause here.
+                    outcome = if (response.status == HttpStatusCode.BadRequest) {
+                        Outcome.BAD_CREDENTIALS
+                    } else {
+                        Outcome.SERVER_ERROR
+                    },
+                    httpStatus = response.status.value,
+                )
             }
             val auth: AuthResponse = response.body()
             if (auth.token.isBlank() || auth.record.profileId.isBlank()) {
                 Timber.w("Sync sign-in returned an incomplete profile")
-                null
+                Result(Outcome.SERVER_ERROR, httpStatus = response.status.value)
             } else {
-                Credentials(auth.token, auth.record.profileId, auth.record.displayName)
+                Result(
+                    Outcome.SUCCESS,
+                    Credentials(auth.token, auth.record.profileId, auth.record.displayName)
+                )
             }
         } catch (e: Exception) {
             Timber.e(e, "Sync sign-in threw")
-            null
+            Result(Outcome.UNREACHABLE)
         } finally {
             client.close()
         }

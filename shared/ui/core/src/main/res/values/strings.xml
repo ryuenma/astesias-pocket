@@ -508,4 +508,8 @@
     <string name="sync_connected_as">Connected as %1$s</string>
     <string name="sync_not_connected">Not connected</string>
     <string name="sync_disconnect">Disconnect</string>
+
+    <string name="sync_err_no_account">The server answered but refused these sign-in details. If you have not connected this account yet, it needs to be created on the server first.</string>
+    <string name="sync_err_unreachable">Could not reach the server. Check the address and your connection.</string>
+    <string name="sync_err_server">The server replied with something unexpected. Try again shortly.</string>
 </resources>

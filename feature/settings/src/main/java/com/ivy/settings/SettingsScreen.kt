@@ -51,6 +51,7 @@ import com.ivy.navigation.AttributionsScreen
 import com.ivy.navigation.FeaturesScreen
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.Navigation
+import com.ivy.data.sync.DirectoryAuthApi
 import com.ivy.data.sync.SyncConfig
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
@@ -72,6 +73,7 @@ import com.ivy.wallet.ui.theme.modal.CurrencyModal
 import com.ivy.wallet.ui.theme.modal.DeleteModal
 import com.ivy.wallet.ui.theme.modal.NameModal
 import com.ivy.wallet.ui.theme.modal.SyncServerModal
+import com.ivy.wallet.ui.theme.modal.SyncSignInResult
 import com.ivy.wallet.ui.theme.modal.ProgressModal
 import java.util.Locale
 
@@ -139,7 +141,18 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         syncBaseUrl = uiState.syncBaseUrl,
         syncProfile = uiState.syncProfile,
         onSyncSignIn = { url, email, password ->
-            viewModel.signInToSync(url, email, password)
+            // Map the data layer's typed outcome onto the UI's own type, so the
+            // legacy modal never has to import the networking layer.
+            viewModel.signInToSync(url, email, password).let {
+                SyncSignInResult(
+                    when (it.outcome) {
+                        DirectoryAuthApi.Outcome.SUCCESS -> SyncSignInResult.Outcome.SUCCESS
+                        DirectoryAuthApi.Outcome.UNREACHABLE -> SyncSignInResult.Outcome.UNREACHABLE
+                        DirectoryAuthApi.Outcome.BAD_CREDENTIALS -> SyncSignInResult.Outcome.BAD_CREDENTIALS
+                        DirectoryAuthApi.Outcome.SERVER_ERROR -> SyncSignInResult.Outcome.SERVER_ERROR
+                    }
+                )
+            }
         },
         onSyncDisconnect = {
             viewModel.disconnectSync()
@@ -178,7 +191,8 @@ private fun BoxWithConstraintsScope.UI(
     onSwitchLanguage: () -> Unit = {},
     syncBaseUrl: String = "",
     syncProfile: String? = null,
-    onSyncSignIn: suspend (String, String, String) -> String? = { _, _, _ -> null },
+    onSyncSignIn: suspend (String, String, String) -> SyncSignInResult =
+        { _, _, _ -> SyncSignInResult(SyncSignInResult.Outcome.SERVER_ERROR) },
     onSyncDisconnect: () -> Unit = {}
 ) {
     var currencyModalVisible by remember { mutableStateOf(false) }

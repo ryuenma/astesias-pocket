@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.viewModelScope
 import com.ivy.base.legacy.SharedPrefs
+import com.ivy.data.sync.DirectoryAuthApi
 import com.ivy.data.sync.SyncConfig
 import com.ivy.base.legacy.Theme
 import com.ivy.base.legacy.refreshWidget
@@ -220,8 +221,11 @@ class SettingsViewModel @Inject constructor(
      *   message rather than pretending to know whether the address, the
      *   credentials, or an unreachable host was the wrong one.
      */
-    suspend fun signInToSync(baseUrl: String, email: String, password: String): String? =
-        syncConfig.signIn(baseUrl, email, password)
+    suspend fun signInToSync(
+        baseUrl: String,
+        email: String,
+        password: String
+    ): DirectoryAuthApi.Result = syncConfig.signIn(baseUrl, email, password)
 
     fun disconnectSync() {
         syncConfig.clear()

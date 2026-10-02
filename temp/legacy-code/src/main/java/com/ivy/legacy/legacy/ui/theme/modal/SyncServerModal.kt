@@ -57,7 +57,7 @@ fun BoxWithConstraintsScope.SyncServerModal(
     currentProfile: String?,
     dismiss: () -> Unit,
     id: UUID = UUID.randomUUID(),
-    onSignIn: suspend (baseUrl: String, email: String, password: String) -> String?,
+    onSignIn: suspend (baseUrl: String, email: String, password: String) -> SyncSignInResult,
     onDisconnect: () -> Unit,
 ) {
     // STABLE identity for the remember keys.
@@ -76,7 +76,7 @@ fun BoxWithConstraintsScope.SyncServerModal(
     var email by remember(stateKey) { mutableStateOf("") }
     var password by remember(stateKey) { mutableStateOf("") }
     var working by remember(stateKey) { mutableStateOf(false) }
-    var failure by remember(stateKey) { mutableStateOf(false) }
+    var failure by remember(stateKey) { mutableStateOf<SyncSignInResult.Outcome?>(null) }
     val scope = rememberCoroutineScope()
 
     // A screen that survives a rotation must not restore a password into a text
@@ -84,24 +84,24 @@ fun BoxWithConstraintsScope.SyncServerModal(
     LaunchedEffect(visible, stateKey) {
         if (!visible) {
             password = ""
-            failure = false
+            failure = null
         }
     }
 
     fun attemptSignIn() {
         if (working || url.isBlank() || email.isBlank() || password.isBlank()) return
         working = true
-        failure = false
+        failure = null
         val secret = password
         password = ""
         scope.launch {
-            val profile = try {
+            val result = try {
                 onSignIn(url.trim(), email.trim(), secret)
             } catch (e: Exception) {
-                null
+                SyncSignInResult(SyncSignInResult.Outcome.UNREACHABLE)
             }
             working = false
-            if (profile != null) dismiss() else failure = true
+            if (result.succeeded) dismiss() else failure = result.outcome
         }
     }
 
@@ -146,7 +146,7 @@ fun BoxWithConstraintsScope.SyncServerModal(
             value = url,
             hint = stringResource(R.string.sync_server_url_hint),
             keyboard = KeyboardType.Uri,
-            errorReset = { failure = false },
+            errorReset = { failure = null },
             onChange = { url = it }
         )
         Spacer(Modifier.height(24.dp))
@@ -163,7 +163,7 @@ fun BoxWithConstraintsScope.SyncServerModal(
             // costs nothing here - the server validates the address regardless.
             keyboard = KeyboardType.Text,
             capitalization = KeyboardCapitalization.None,
-            errorReset = { failure = false },
+            errorReset = { failure = null },
             onChange = { email = it }
         )
         Spacer(Modifier.height(24.dp))
@@ -173,16 +173,19 @@ fun BoxWithConstraintsScope.SyncServerModal(
             keyboard = KeyboardType.Password,
             capitalization = KeyboardCapitalization.None,
             transformation = PasswordVisualTransformation(),
-            errorReset = { failure = false },
+            errorReset = { failure = null },
             onChange = { password = it },
             onDone = { attemptSignIn() }
         )
 
-        if (failure) {
+        if (failure != null) {
             Spacer(Modifier.height(16.dp))
             Text(
                 modifier = Modifier.padding(horizontal = 32.dp),
-                text = stringResource(R.string.sync_sign_in_failed),
+                // Name the ACTUAL cause. "Could not connect" blamed the network for
+                // what was actually a missing account, and sent us looking in the
+                // wrong place for several rounds.
+                text = stringResource(failureMessageRes(failure!!)),
                 style = UI.typo.nC.style(
                     color = UI.colors.red,
                     fontWeight = FontWeight.Medium
@@ -217,6 +220,27 @@ fun BoxWithConstraintsScope.SyncServerModal(
 
         Spacer(Modifier.height(48.dp))
     }
+}
+
+/**
+ * Outcome of a sign-in attempt, as the UI needs to see it.
+ *
+ * Deliberately a separate type from the data layer's result so this legacy UI
+ * module stays free of the networking types.
+ */
+data class SyncSignInResult(val outcome: SyncSignInResult.Outcome) {
+    enum class Outcome { SUCCESS, UNREACHABLE, BAD_CREDENTIALS, SERVER_ERROR }
+    val succeeded: Boolean get() = outcome == Outcome.SUCCESS
+}
+
+private fun failureMessageRes(outcome: SyncSignInResult.Outcome): Int = when (outcome) {
+    // The server answered and refused. On PocketBase this is the exact signature
+    // of an account that was never created, which is the overwhelmingly likely
+    // cause on a server whose profiles have not been seeded yet.
+    SyncSignInResult.Outcome.BAD_CREDENTIALS -> R.string.sync_err_no_account
+    SyncSignInResult.Outcome.UNREACHABLE -> R.string.sync_err_unreachable
+    SyncSignInResult.Outcome.SERVER_ERROR -> R.string.sync_err_server
+    SyncSignInResult.Outcome.SUCCESS -> R.string.sync_err_server
 }
 
 /** One labelled text field, wrapping the legacy component's long signature. */
@@ -265,7 +289,7 @@ private fun Preview() {
             currentUrl = "https://astesias-pb.fly.dev",
             currentProfile = null,
             dismiss = {},
-            onSignIn = { _, _, _ -> null },
+            onSignIn = { _, _, _ -> SyncSignInResult(SyncSignInResult.Outcome.BAD_CREDENTIALS) },
             onDisconnect = {},
         )
     }

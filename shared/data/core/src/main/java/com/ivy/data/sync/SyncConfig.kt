@@ -49,22 +49,25 @@ class SyncConfig @Inject constructor(
      * copied out of a server log - a pasted token is easy to get wrong, easy
      * to leak into a screenshot, and impossible to rotate by hand.
      *
-     * @return the resolved profileId on success, null if the server refused.
+     * @return the outcome, so the caller can explain the failure rather than
+     *   showing one catch-all message.
      */
-    suspend fun signIn(baseUrl: String, email: String, password: String): String? {
+    suspend fun signIn(baseUrl: String, email: String, password: String): DirectoryAuthApi.Result {
         val normalised = baseUrl.trimEnd('/')
-        if (normalised.isBlank() || email.isBlank() || password.isBlank()) return null
+        if (normalised.isBlank() || email.isBlank() || password.isBlank()) {
+            return DirectoryAuthApi.Result(DirectoryAuthApi.Outcome.BAD_CREDENTIALS)
+        }
         return try {
-            val response = DirectoryAuthApi.token(normalised, email, password)
-            if (response != null) {
+            val result = DirectoryAuthApi.token(normalised, email, password)
+            result.credentials?.let { creds ->
                 sharedPrefs.putString(KEY_BASE_URL, normalised)
-                sharedPrefs.putString(KEY_TOKEN, response.token)
-                sharedPrefs.putString(KEY_PROFILE_ID, response.profileId)
+                sharedPrefs.putString(KEY_TOKEN, creds.token)
+                sharedPrefs.putString(KEY_PROFILE_ID, creds.profileId)
             }
-            response?.profileId
+            result
         } catch (e: Exception) {
             Timber.e(e, "Sync sign-in failed")
-            null
+            DirectoryAuthApi.Result(DirectoryAuthApi.Outcome.UNREACHABLE)
         }
     }
 
