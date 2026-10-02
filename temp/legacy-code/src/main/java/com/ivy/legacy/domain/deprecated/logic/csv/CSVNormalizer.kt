@@ -5,16 +5,10 @@ import javax.inject.Inject
 
 class CSVNormalizer @Inject constructor() {
 
-    fun normalize(rawCSV: String, importType: ImportType): String {
-        return when (importType) {
-            ImportType.WALLET_BY_BUDGET_BAKERS -> walletByBudgetBakers(rawCSV)
-            else -> rawCSV
-        }
-    }
-
-    private fun walletByBudgetBakers(rawCSV: String): String {
-        return rawCSV
-            .replace(",", " ")
-            .replace(";", ",")
-    }
+    /**
+     * Ivy's own CSV export needs no normalisation. The one adapter that did
+     * (Wallet by BudgetBakers) was removed by owner decision.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun normalize(rawCSV: String, importType: ImportType): String = rawCSV
 }

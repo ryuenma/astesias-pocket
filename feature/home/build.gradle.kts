@@ -14,8 +14,6 @@ dependencies {
     implementation(projects.shared.ui.navigation)
     implementation(projects.temp.legacyCode)
     implementation(projects.temp.oldDesign)
-    implementation(projects.widget.addTransaction)
-    implementation(projects.feature.poll.public)
 
     testImplementation(projects.shared.ui.testing)
 }

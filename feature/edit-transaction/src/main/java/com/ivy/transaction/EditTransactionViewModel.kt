@@ -56,7 +56,6 @@ import com.ivy.wallet.domain.deprecated.logic.currency.ExchangeRatesLogic
 import com.ivy.wallet.domain.deprecated.logic.loantrasactions.LoanTransactionsLogic
 import com.ivy.wallet.domain.deprecated.logic.model.CreateAccountData
 import com.ivy.wallet.domain.deprecated.logic.model.CreateCategoryData
-import com.ivy.widget.balance.WalletBalanceWidgetReceiver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -636,7 +635,6 @@ class EditTransactionViewModel @Inject constructor(
                     associateTagToTransaction(it, id)
                 }
 
-                refreshWidget(WalletBalanceWidgetReceiver::class.java)
             }
 
             closeScreen()
@@ -751,7 +749,6 @@ class EditTransactionViewModel @Inject constructor(
                     transactionRepo.save(it)
                 }
 
-                refreshWidget(WalletBalanceWidgetReceiver::class.java)
             }
 
             if (closeScreen) {

@@ -136,6 +136,8 @@ class OnboardingRouter(
 
     // ------------------------------------- Step 2 - Choose path -----------------------------------
     fun startImport() {
+        // Only the Ivy Wallet backup path remains; the nine third-party CSV
+        // importers were removed by owner decision.
         nav.navigateTo(
             ImportScreen(
                 launchedFromOnboarding = true

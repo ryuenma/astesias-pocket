@@ -16,13 +16,6 @@ data object OnboardingScreen : Screen {
         get() = true
 }
 
-data class CSVScreen(
-    val launchedFromOnboarding: Boolean
-) : Screen {
-    override val isLegacy: Boolean
-        get() = true
-}
-
 data class EditTransactionScreen(
     val initialTransactionId: UUID?,
     val type: TransactionType,
@@ -95,13 +88,6 @@ data object SettingsScreen : Screen {
         get() = true
 }
 
-data class ImportScreen(
-    val launchedFromOnboarding: Boolean
-) : Screen {
-    override val isLegacy: Boolean
-        get() = true
-}
-
 data object ReportScreen : Screen {
     override val isLegacy: Boolean
         get() = true
@@ -129,19 +115,20 @@ data class LoanDetailsScreen(
         get() = true
 }
 
-data object ExchangeRatesScreen : Screen {
-    override val isLegacy: Boolean
-        get() = true
-}
-
 data object FeaturesScreen : Screen
 
 data object AttributionsScreen : Screen
 
-data object ContributorsScreen : Screen
+data class ImportScreen(
+    val launchedFromOnboarding: Boolean
+) : Screen {
+    override val isLegacy: Boolean
+        get() = true
+}
 
-data object ReleasesScreen : Screen
-
-data object DisclaimerScreen : Screen
-
-data object PollScreen : Screen
+data class CSVScreen(
+    val launchedFromOnboarding: Boolean
+) : Screen {
+    override val isLegacy: Boolean
+        get() = true
+}

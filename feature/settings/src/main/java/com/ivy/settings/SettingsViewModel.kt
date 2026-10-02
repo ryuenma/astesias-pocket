@@ -34,7 +34,6 @@ import com.ivy.ui.ComposeViewModel
 import com.ivy.wallet.domain.action.global.StartDayOfMonthAct
 import com.ivy.wallet.domain.action.global.UpdateStartDayOfMonthAct
 import com.ivy.wallet.domain.action.settings.SettingsAct
-import com.ivy.widget.balance.WalletBalanceWidgetReceiver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -323,7 +322,6 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             sharedPrefs.putBoolean(SharedPrefs.APP_LOCK_ENABLED, lock)
-            refreshWidget(WalletBalanceWidgetReceiver::class.java)
         }
     }
 

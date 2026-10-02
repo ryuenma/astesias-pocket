@@ -17,11 +17,7 @@ import com.ivy.legacy.data.model.MainTab
 import com.ivy.navigation.EditPlannedScreen
 import com.ivy.navigation.Navigation
 import com.ivy.navigation.PieChartStatisticScreen
-import com.ivy.navigation.PollScreen
-import com.ivy.poll.data.PollRepository
-import com.ivy.poll.data.model.PollId
 import com.ivy.ui.R
-import com.ivy.widget.transaction.AddTransactionWidgetCompact
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -31,7 +27,6 @@ class CustomerJourneyCardsProvider @Inject constructor(
   private val plannedPaymentRuleDao: PlannedPaymentRuleDao,
   private val sharedPrefs: SharedPrefs,
   private val ivyContext: IvyWalletCtx,
-  private val pollRepository: PollRepository,
   private val timeProvider: TimeProvider,
 ) {
 
@@ -39,7 +34,6 @@ class CustomerJourneyCardsProvider @Inject constructor(
     val trnCount = transactionRepository.countHappenedTransactions().value
     val plannedPaymentsCount = plannedPaymentRuleDao.countPlannedPayments()
     val deps = CustomerJourneyDeps(
-      pollRepository = pollRepository,
       timeProvider = timeProvider,
     )
 
@@ -70,7 +64,6 @@ class CustomerJourneyCardsProvider @Inject constructor(
     val ACTIVE_CARDS = listOf(
       adjustBalanceCard(),
       addPlannedPaymentCard(),
-      didYouKnow_pinAddTransactionWidgetCard(),
       didYouKnow_expensesPieChart(),
     )
 
@@ -108,22 +101,6 @@ class CustomerJourneyCardsProvider @Inject constructor(
             plannedPaymentRuleId = null
           )
         )
-      }
-    )
-
-    fun didYouKnow_pinAddTransactionWidgetCard() = CustomerJourneyCardModel(
-      id = "add_transaction_widget",
-      condition = { trnCount, _, _, _ ->
-        trnCount >= 3
-      },
-      title = stringRes(R.string.did_you_know),
-      description = stringRes(R.string.widget_description),
-      cta = stringRes(R.string.add_widget),
-      ctaIcon = R.drawable.ic_custom_atom_s,
-      background = Gradient.solid(GreenLight),
-      hasDismiss = true,
-      onAction = { _, _, ivyActivity ->
-        ivyActivity.pinWidget(AddTransactionWidgetCompact::class.java)
       }
     )
 

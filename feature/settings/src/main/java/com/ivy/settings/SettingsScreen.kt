@@ -48,12 +48,9 @@ import com.ivy.legacy.IvyWalletPreview
 import com.ivy.legacy.rootScreen
 import com.ivy.legacy.utils.drawColoredShadow
 import com.ivy.navigation.AttributionsScreen
-import com.ivy.navigation.ContributorsScreen
-import com.ivy.navigation.ExchangeRatesScreen
 import com.ivy.navigation.FeaturesScreen
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.Navigation
-import com.ivy.navigation.ReleasesScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.ui.R
@@ -193,9 +190,6 @@ private fun BoxWithConstraintsScope.UI(
 
                 val rootScreen = rootScreen()
                 Text(
-                    modifier = Modifier.clickable {
-                        nav.navigateTo(ReleasesScreen)
-                    },
                     text = "${rootScreen.buildVersionName} (${rootScreen.buildVersionCode})",
                     style = UI.typo.nC.style(
                         color = UI.colors.gray,
@@ -319,13 +313,6 @@ private fun BoxWithConstraintsScope.UI(
                 Spacer(Modifier.height(12.dp))
             }
 
-            SettingsDefaultButton(
-                icon = R.drawable.ic_currency,
-                text = stringResource(R.string.exchange_rates),
-            ) {
-                nav.navigateTo(ExchangeRatesScreen)
-            }
-
             Spacer(Modifier.height(12.dp))
 
             AppSwitch(
@@ -433,7 +420,6 @@ private fun BoxWithConstraintsScope.UI(
 
             Spacer(Modifier.height(12.dp))
 
-            Releases(nav = nav)
 
             Spacer(Modifier.height(12.dp))
 
@@ -450,7 +436,6 @@ private fun BoxWithConstraintsScope.UI(
 
             Spacer(Modifier.height(12.dp))
 
-            Contributors(nav = nav)
 
             Spacer(Modifier.height(12.dp))
 
@@ -660,29 +645,6 @@ private fun RequestFeature(
         text = stringResource(R.string.request_a_feature),
     ) {
         onClick()
-    }
-}
-
-
-@Composable
-private fun Releases(nav: Navigation) {
-    SettingsDefaultButton(
-        icon = R.drawable.ic_vue_money_tag,
-        text = stringResource(R.string.releases),
-        iconPadding = 8.dp
-    ) {
-        nav.navigateTo(ReleasesScreen)
-    }
-}
-
-@Composable
-private fun Contributors(nav: Navigation) {
-    SettingsDefaultButton(
-        icon = R.drawable.ic_vue_people_people,
-        text = stringResource(R.string.project_contributors),
-        iconPadding = 8.dp
-    ) {
-        nav.navigateTo(ContributorsScreen)
     }
 }
 

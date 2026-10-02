@@ -367,7 +367,7 @@ private fun Preview() {
     com.ivy.legacy.IvyWalletPreview {
         ImportInstructions(
             hasSkip = true,
-            importType = ImportType.MONEY_MANAGER,
+            importType = ImportType.IVY,
             onSkip = {}
         ) {
         }

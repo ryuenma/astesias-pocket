@@ -50,9 +50,6 @@ import com.ivy.ui.R
 import com.ivy.ui.time.TimeFormatter
 import com.ivy.ui.time.impl.DateTimePicker
 import com.ivy.wallet.ui.applocked.AppLockedScreen
-import com.ivy.widget.balance.WalletBalanceWidgetReceiver
-import com.ivy.widget.transaction.AddTransactionWidget
-import com.ivy.widget.transaction.AddTransactionWidgetCompact
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDate
 import java.time.LocalTime
@@ -159,9 +156,6 @@ class RootActivity : AppCompatActivity(), RootScreen {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setupDatePicker()
         setupTimePicker()
-        AddTransactionWidget.updateBroadcast(this)
-        AddTransactionWidgetCompact.updateBroadcast(this)
-        WalletBalanceWidgetReceiver.updateBroadcast(this)
     }
 
     private companion object {
@@ -419,9 +413,4 @@ class RootActivity : AppCompatActivity(), RootScreen {
     override val buildVersionCode: Int
         get() = BuildConfig.VERSION_CODE
 
-    override fun <T> pinWidget(widget: Class<T>) {
-        val appWidgetManager: AppWidgetManager = this.getSystemService(AppWidgetManager::class.java)
-        val addTransactionWidget = ComponentName(this, widget)
-        appWidgetManager.requestPinAppWidget(addTransactionWidget, null, null)
-    }
 }

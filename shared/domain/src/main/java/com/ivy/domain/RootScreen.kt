@@ -28,5 +28,4 @@ interface RootScreen {
 
     fun openGooglePlayAppPage(appId: String)
 
-    fun <T> pinWidget(widget: Class<T>)
 }
