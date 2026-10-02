@@ -76,7 +76,7 @@ fun OnboardingPrivacyTC(
                 ),
             painter = painterResource(id = R.drawable.ivy_wallet_logo),
             contentScale = ContentScale.FillBounds,
-            contentDescription = "Ivy Wallet logo"
+            contentDescription = "Astesia’s Pocket logo"
         )
 
         Spacer(Modifier.height(40.dp))

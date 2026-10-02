@@ -6,8 +6,12 @@ plugins {
     id("dagger.hilt.android.plugin")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
+    // Fork: com.google.gms.google-services and com.google.firebase.crashlytics are
+    // intentionally NOT applied. Ivy's app/google-services.json points at Ivy's own
+    // "ivy-widget" Firebase project, so applying the plugin keyed the build to
+    // com.ivy.wallet and would have sent this fork's crash reports to Ivy. Nothing in
+    // Astesia's Pocket talks to Firebase; Crashlytics helpers now log locally via
+    // Timber (see temp/legacy-code/.../FirebaseExt.kt).
     id("io.gitlab.arturbosch.detekt")
 }
 
@@ -16,7 +20,7 @@ android {
     compileSdk = libs.versions.compile.sdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.ivy.wallet"
+        applicationId = "astesias.pocket"
         minSdk = libs.versions.min.sdk.get().toInt()
         targetSdk = libs.versions.compile.sdk.get().toInt()
         versionName = libs.versions.version.name.get()
@@ -57,7 +61,7 @@ android {
 
             signingConfig = signingConfigs.getByName("release")
 
-            resValue("string", "app_name", "Ivy Wallet")
+            resValue("string", "app_name", "Astesia’s Pocket")
         }
 
         debug {
@@ -70,7 +74,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "Ivy Wallet Debug")
+            resValue("string", "app_name", "Astesia’s Pocket Debug")
         }
 
         create("demo") {
@@ -89,7 +93,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "Ivy Wallet")
+            resValue("string", "app_name", "Astesia’s Pocket")
         }
     }
 

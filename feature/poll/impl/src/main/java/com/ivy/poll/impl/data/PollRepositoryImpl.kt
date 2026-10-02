@@ -4,9 +4,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import arrow.core.Either
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
 import com.ivy.data.datastore.IvyDataStore
 import com.ivy.domain.usecase.android.DeviceId
 import com.ivy.poll.data.PollRepository
@@ -14,9 +11,14 @@ import com.ivy.poll.data.model.PollId
 import com.ivy.poll.data.model.PollOptionId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import timber.log.Timber
 import javax.inject.Inject
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+
+// Fork change: this used to write the vote to Ivy's Firestore ("ivy-widget" project),
+// sending the device id and choice to Ivy's infrastructure. Astesia's Pocket does not
+// ship Ivy's backend, so the vote is recorded locally only. The vote card that reached
+// this code already expired on 2025-07-28, so in practice this is unreachable either
+// way -- but the network call is gone rather than merely dead.
 
 class PollRepositoryImpl @Inject constructor(
   private val dataStore: IvyDataStore
@@ -35,29 +37,10 @@ class PollRepositoryImpl @Inject constructor(
     deviceId: DeviceId,
     poll: PollId,
     option: PollOptionId
-  ): Either<String, Unit> = suspendCoroutine { cont ->
-    // Define a reference to the document using the deviceId as its ID
-    val voteDocRef = Firebase.firestore
-      .collection("polls")
-      .document(poll.id)
-      .collection("votes")
-      .document(deviceId.value)
-
-    // Prepare the data for the vote
-    val voteData = mapOf(
-      "option" to option.value,
-      "timestamp" to FieldValue.serverTimestamp() // Good practice to store a timestamp
-    )
-
-    // Use .set() to create or overwrite the document with the specific ID
-    voteDocRef.set(voteData)
-      .addOnSuccessListener {
-        cont.resume(Either.Right(Unit))
-      }
-      .addOnFailureListener { e ->
-        val message = e.message ?: "null message"
-        cont.resume(Either.Left("FireStore - $message"))
-      }
+  ): Either<String, Unit> {
+    Timber.i("Poll vote recorded locally: poll=%s option=%s", poll.id, option.value)
+    setVoted(poll, true)
+    return Either.Right(Unit)
   }
 
   private fun votedKey(poll: PollId): Preferences.Key<Boolean> {
