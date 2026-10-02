@@ -49,6 +49,30 @@ data class TransactionEntity(
     val paidForDateTime: Instant? = null,
     @SerialName("attachmentUrl")
     val attachmentUrl: String? = null,
+    /**
+     * Profile that owns the OTHER leg of a cross-profile transfer.
+     *
+     * Null for every ordinary transaction, including Ivy's own intra-profile
+     * transfers between two of the same person's accounts. Its presence is what
+     * distinguishes "money moved between two of my accounts" from "money moved to
+     * my SO", which otherwise look identical in this table.
+     */
+    @SerialName("counterpartProfileId")
+    val counterpartProfileId: String? = null,
+
+    /**
+     * Correlation id shared by both legs of a cross-profile transfer.
+     *
+     * Cannot be derived from the accounts: the two legs point at different
+     * accounts (mine -> hers, hers -> mine) so they share no account id. This id is
+     * also the idempotency key - a device materialises the incoming leg only when
+     * no transaction with this id is already in its database, so a replayed sync
+     * cannot duplicate it.
+     */
+    @SerialName("linkedTransactionId")
+    @Serializable(with = KSerializerUUID::class)
+    val linkedTransactionId: UUID? = null,
+
     // This refers to the loan id that is linked with a transaction
     @SerialName("loanId")
     @Serializable(with = KSerializerUUID::class)

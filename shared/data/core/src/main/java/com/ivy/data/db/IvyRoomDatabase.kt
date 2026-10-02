@@ -15,6 +15,7 @@ import com.ivy.data.db.dao.read.SettingsDao
 import com.ivy.data.db.dao.read.TagDao
 import com.ivy.data.db.dao.read.TagAssociationDao
 import com.ivy.data.db.dao.read.TransactionDao
+import com.ivy.data.db.dao.read.DirectoryAccountDao
 import com.ivy.data.db.dao.read.UserDao
 import com.ivy.data.db.dao.write.WriteAccountDao
 import com.ivy.data.db.dao.write.WriteBudgetDao
@@ -28,6 +29,7 @@ import com.ivy.data.db.dao.write.WriteTagDao
 import com.ivy.data.db.dao.write.WriteTagAssociationDao
 import com.ivy.data.db.dao.write.WriteTransactionDao
 import com.ivy.data.db.entity.AccountEntity
+import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.db.entity.BudgetEntity
 import com.ivy.data.db.entity.CategoryEntity
 import com.ivy.data.db.entity.ExchangeRateEntity
@@ -45,6 +47,7 @@ import com.ivy.data.db.migration.Migration126to127_LoanRecordType
 import com.ivy.data.db.migration.Migration127to128_PaidForDateRecord
 import com.ivy.data.db.migration.Migration128to129_DeleteIsDeleted
 import com.ivy.data.db.migration.Migration129to130_LoanIncludeNote
+import com.ivy.data.db.migration.Migration130to131_CrossProfileTransfers
 import com.ivy.domain.db.RoomTypeConverters
 import com.ivy.domain.db.migration.Migration105to106_TrnRecurringRules
 import com.ivy.domain.db.migration.Migration106to107_Wishlist
@@ -67,7 +70,9 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
 
 @Database(
     entities = [
-        AccountEntity::class, TransactionEntity::class, CategoryEntity::class,
+        AccountEntity::class,
+        DirectoryAccountEntity::class,
+        TransactionEntity::class, CategoryEntity::class,
         SettingsEntity::class, PlannedPaymentRuleEntity::class,
         UserEntity::class, ExchangeRateEntity::class, BudgetEntity::class,
         LoanEntity::class, LoanRecordEntity::class, TagEntity::class, TagAssociationEntity::class
@@ -79,7 +84,7 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
             spec = IvyRoomDatabase.DeleteSEMigration::class
         )
     ],
-    version = 130,
+    version = 131,
     exportSchema = true
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -108,6 +113,8 @@ abstract class IvyRoomDatabase : RoomDatabase() {
     abstract val writeLoanRecordDao: WriteLoanRecordDao
     abstract val writeTagDao: WriteTagDao
     abstract val writeTagAssociationDao: WriteTagAssociationDao
+
+    abstract val directoryAccountDao: DirectoryAccountDao
 
     companion object {
         /**
@@ -142,7 +149,8 @@ abstract class IvyRoomDatabase : RoomDatabase() {
             Migration126to127_LoanRecordType(),
             Migration127to128_PaidForDateRecord(),
             Migration128to129_DeleteIsDeleted(),
-            Migration129to130_LoanIncludeNote()
+            Migration129to130_LoanIncludeNote(),
+            Migration130to131_CrossProfileTransfers()
         )
 
         /**
