@@ -501,12 +501,6 @@ private fun QuickAccess(
 //        }
 
             val rootScreen = rootScreen()
-            MoreMenuButton(
-                icon = R.drawable.home_more_menu_share,
-                label = stringResource(R.string.share_ivy)
-            ) {
-                rootScreen.shareIvyWallet()
-            }
 
             Spacer(Modifier.weight(1f))
 
