@@ -2,6 +2,7 @@ package com.ivy.data.di
 
 import android.content.Context
 import com.ivy.data.db.IvyRoomDatabase
+import com.ivy.data.profile.ProfileRegistry
 import com.ivy.data.db.dao.read.AccountDao
 import com.ivy.data.db.dao.read.BudgetDao
 import com.ivy.data.db.dao.read.CategoryDao
@@ -36,13 +37,23 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object RoomDbModule {
 
+    /**
+     * Opens the database belonging to the active profile.
+     *
+     * [ProfileRegistry] is injected rather than used statically so the graph
+     * construction order is explicit, and the profile is read once here: every DAO
+     * below is derived from the same instance, which is what makes the profile
+     * boundary hold for all of them at once.
+     */
     @Provides
     @Singleton
     fun provideIvyRoomDatabase(
         @ApplicationContext appContext: Context,
+        profileRegistry: ProfileRegistry,
     ): IvyRoomDatabase {
         return IvyRoomDatabase.create(
             applicationContext = appContext,
+            profileId = profileRegistry.activeProfileId(),
         )
     }
 

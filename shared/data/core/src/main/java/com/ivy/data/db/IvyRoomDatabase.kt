@@ -3,6 +3,7 @@ package com.ivy.data.db
 import android.content.Context
 import androidx.room.*
 import androidx.room.migration.AutoMigrationSpec
+import com.ivy.data.profile.ProfileId
 import com.ivy.data.db.dao.read.AccountDao
 import com.ivy.data.db.dao.read.BudgetDao
 import com.ivy.data.db.dao.read.CategoryDao
@@ -109,7 +110,13 @@ abstract class IvyRoomDatabase : RoomDatabase() {
     abstract val writeTagAssociationDao: WriteTagAssociationDao
 
     companion object {
-        const val DB_NAME = "ivywallet.db"
+        /**
+         * Ivy Wallet's original single-database filename.
+         *
+         * Kept as the file for [com.ivy.data.profile.ProfileId.DEFAULT] so an existing
+         * install keeps its data across the upgrade instead of appearing empty.
+         */
+        const val LEGACY_DB_NAME = "ivywallet.db"
 
         fun migrations() = arrayOf(
             Migration105to106_TrnRecurringRules(),
@@ -138,13 +145,29 @@ abstract class IvyRoomDatabase : RoomDatabase() {
             Migration129to130_LoanIncludeNote()
         )
 
+        /**
+         * Opens the database owned by [profileId].
+         *
+         * One file per profile is what makes cross-profile contamination
+         * structurally impossible rather than a filtering rule each new query has to
+         * remember. The cost is that the instance cannot be swapped in place: it is
+         * a `@Singleton` handed to roughly twenty unscoped DAOs that each capture it,
+         * so replacing the object would leave those DAOs reading a closed handle.
+         * [com.ivy.data.profile.ProfileSwitcher] therefore restarts the process
+         * instead. See that class for the full reasoning.
+         */
         @Suppress("SpreadOperator")
-        fun create(applicationContext: Context): IvyRoomDatabase {
+        fun create(
+            applicationContext: Context,
+            profileId: ProfileId,
+        ): IvyRoomDatabase {
+            val dbName =
+                if (profileId == ProfileId.DEFAULT) LEGACY_DB_NAME else profileId.dbFileName
             return Room
                 .databaseBuilder(
                     applicationContext,
                     IvyRoomDatabase::class.java,
-                    DB_NAME
+                    dbName
                 )
                 .addMigrations(*migrations())
                 .build()
