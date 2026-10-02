@@ -1,148 +1,66 @@
 package com.ivy.onboarding.viewmodel
 
 import androidx.compose.runtime.MutableState
-import com.ivy.data.db.dao.read.AccountDao
-import com.ivy.domain.usecase.exchange.SyncExchangeRatesUseCase
-import com.ivy.legacy.LogoutLogic
 import com.ivy.base.legacy.SharedPrefs
-import com.ivy.data.model.Category
-import com.ivy.data.model.primitive.AssetCode
-import com.ivy.data.repository.CategoryRepository
-import com.ivy.legacy.data.model.AccountBalance
-import com.ivy.legacy.utils.OpResult
-import com.ivy.legacy.utils.ioThread
+import com.ivy.data.db.dao.read.AccountDao
+import com.ivy.data.profile.Profile
+import com.ivy.data.profile.ProfileId
+import com.ivy.data.profile.ProfileRegistry
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.MainScreen
 import com.ivy.navigation.Navigation
 import com.ivy.navigation.OnboardingScreen
 import com.ivy.onboarding.OnboardingState
-import com.ivy.wallet.domain.data.IvyCurrency
 import com.ivy.wallet.domain.deprecated.logic.PreloadDataLogic
-import com.ivy.wallet.domain.deprecated.logic.model.CreateAccountData
-import com.ivy.wallet.domain.deprecated.logic.model.CreateCategoryData
 import com.ivy.wallet.domain.deprecated.logic.notification.TransactionReminderLogic
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Drives the four onboarding steps: splash -> import -> currency -> profile name.
+ *
+ * There is no account or category step. Accounts arrive with an imported backup,
+ * and [PreloadDataLogic] seeds a default one otherwise - see
+ * [completeOnboarding]. A fresh install is therefore usable without the removed
+ * steps, which is why they could go rather than merely be hidden.
+ */
 class OnboardingRouter(
-    private val opGoogleSignIn: MutableState<OpResult<Unit>?>,
     private val state: MutableState<OnboardingState>,
-    private val accounts: MutableState<ImmutableList<AccountBalance>>,
-    private val accountSuggestions: MutableState<ImmutableList<CreateAccountData>>,
-    private val categories: MutableState<ImmutableList<Category>>,
-    private val categorySuggestions: MutableState<ImmutableList<CreateCategoryData>>,
-
     private val nav: Navigation,
     private val accountDao: AccountDao,
     private val sharedPrefs: SharedPrefs,
     private val transactionReminderLogic: TransactionReminderLogic,
     private val preloadDataLogic: PreloadDataLogic,
-    private val categoryRepository: CategoryRepository,
-    private val logoutLogic: LogoutLogic,
-    private val syncExchangeRatesUseCase: SyncExchangeRatesUseCase,
+    private val profileRegistry: ProfileRegistry,
 ) {
-
-    var isLoginCache = false
 
     fun initBackHandling(
         screen: OnboardingScreen,
         viewModelScope: CoroutineScope,
-        restartOnboarding: () -> Unit
     ) {
         nav.onBackPressed[screen] = {
             when (state.value) {
-                OnboardingState.SPLASH -> {
-                    // do nothing, consume back
-                    true
-                }
-
-                OnboardingState.LOGIN -> {
-                    // let the user exit the app
-                    false
-                }
-
-                OnboardingState.CHOOSE_PATH -> {
-                    state.value = OnboardingState.LOGIN
-                    true
-                }
-
-                OnboardingState.CURRENCY -> {
-                    if (isLoginCache) {
-                        // user with Ivy account
-                        viewModelScope.launch {
-                            logoutLogic.logout()
-                            isLoginCache = false
-                            restartOnboarding()
-                            state.value = OnboardingState.LOGIN
-                        }
-                    } else {
-                        // fresh user
-                        state.value = OnboardingState.CHOOSE_PATH
-                    }
-                    true
-                }
-
-                OnboardingState.ACCOUNTS -> {
-                    state.value = OnboardingState.CURRENCY
-                    true
-                }
-
-                OnboardingState.CATEGORIES -> {
-                    state.value = OnboardingState.ACCOUNTS
-                    true
-                }
-
-                null -> {
-                    // do nothing, consume back
-                    true
-                }
+                OnboardingState.SPLASH -> true // consume; nothing behind the first screen
+                OnboardingState.IMPORT -> state.value = OnboardingState.SPLASH
+                OnboardingState.CURRENCY -> state.value = OnboardingState.IMPORT
+                OnboardingState.PROFILE_NAME -> state.value = OnboardingState.CURRENCY
+                null -> true
             }
+            true
         }
     }
 
-    // ------------------------------------- Step 0 - Splash ----------------------------------------
-    suspend fun splashNext() {
-        if (state.value == OnboardingState.SPLASH) {
-            delay(1000)
-
-            state.value = OnboardingState.LOGIN
-        }
+    // --------------------------------- Step 1 - Splash ------------------------------------------
+    fun splashNext() {
+        state.value = OnboardingState.IMPORT
     }
-    // ------------------------------------- Step 0 -------------------------------------------------
+    // --------------------------------- Step 1 ---------------------------------------------------
 
-    // ------------------------------------- Step 1 - Login -----------------------------------------
-    suspend fun googleLoginNext() {
-        if (isLogin()) {
-            // Route logged user
-            state.value = OnboardingState.CURRENCY
-        } else {
-            // Route new user
-            state.value = OnboardingState.CHOOSE_PATH
-        }
-    }
-
-    private suspend fun isLogin(): Boolean {
-        isLoginCache = ioThread { accountDao.findAll().isNotEmpty() }
-        return isLoginCache
-    }
-
-    suspend fun offlineAccountNext() {
-        state.value = OnboardingState.CHOOSE_PATH
-    }
-    // ------------------------------------- Step 1 -------------------------------------------------
-
-    // ------------------------------------- Step 2 - Choose path -----------------------------------
+    // --------------------------------- Step 2 - Import ------------------------------------------
     fun startImport() {
         // Only the Ivy Wallet backup path remains; the nine third-party CSV
         // importers were removed by owner decision.
-        nav.navigateTo(
-            ImportScreen(
-                launchedFromOnboarding = true
-            )
-        )
+        nav.navigateTo(ImportScreen(launchedFromOnboarding = true))
     }
 
     fun importSkip() {
@@ -150,109 +68,50 @@ class OnboardingRouter(
     }
 
     fun importFinished(success: Boolean) {
+        // On failure the user stays put: silently advancing would drop them into an
+        // empty wallet that looks exactly like a successful import.
         if (success) {
             state.value = OnboardingState.CURRENCY
         }
     }
+    // --------------------------------- Step 2 ---------------------------------------------------
 
-    fun startFresh() {
-        state.value = OnboardingState.CURRENCY
+    // --------------------------------- Step 3 - Currency ----------------------------------------
+    fun currencyNext() {
+        state.value = OnboardingState.PROFILE_NAME
     }
-    // ------------------------------------- Step 2 -------------------------------------------------
+    // --------------------------------- Step 3 ---------------------------------------------------
 
-    // ------------------------------------- Step 3 - Currency --------------------------------------
-    suspend fun setBaseCurrencyNext(
-        baseCurrency: IvyCurrency,
-        accountsWithBalance: suspend () -> ImmutableList<AccountBalance>,
-    ) {
-        routeToAccounts(
-            baseCurrency = baseCurrency,
-            accountsWithBalance = accountsWithBalance
-        )
-
-        if (isLogin()) {
-            completeOnboarding(baseCurrency = baseCurrency)
-        }
-    }
-    // ------------------------------------- Step 3 -------------------------------------------------
-
-    // ------------------------------------- Step 4 - Accounts --------------------------------------
-    suspend fun accountsNext() {
-        routeToCategories()
+    // --------------------------------- Step 4 - Profile name -----------------------------------
+    fun setProfileNameNext(id: ProfileId, rawName: String, scope: CoroutineScope) {
+        val name = rawName.trim().ifBlank { id.value }
+        profileRegistry.register(Profile(id = id, name = name))
+        completeOnboarding(scope)
     }
 
-    suspend fun accountsSkip() {
-        routeToCategories()
-
-        ioThread {
-            preloadDataLogic.preloadAccounts()
-        }
-    }
-    // ------------------------------------- Step 4 -------------------------------------------------
-
-    // ------------------------------------- Step 5 - Categories ------------------------------------
-    suspend fun categoriesNext(baseCurrency: IvyCurrency?) {
-        completeOnboarding(baseCurrency = baseCurrency)
-    }
-
-    suspend fun categoriesSkip(baseCurrency: IvyCurrency?) {
-        completeOnboarding(baseCurrency = baseCurrency)
-
-        ioThread {
-            preloadDataLogic.preloadCategories()
-        }
-    }
-    // ------------------------------------- Step 5 -------------------------------------------------
-
-    // -------------------------------------- Routes ------------------------------------------------
-    private suspend fun routeToAccounts(
-        baseCurrency: IvyCurrency,
-        accountsWithBalance: suspend () -> ImmutableList<AccountBalance>,
-    ) {
-        val accounts = accountsWithBalance()
-        this.accounts.value = accounts
-
-        accountSuggestions.value =
-            preloadDataLogic.accountSuggestions(baseCurrency.code)
-        state.value = OnboardingState.ACCOUNTS
-    }
-
-    private suspend fun routeToCategories() {
-        categories.value =
-            ioThread { categoryRepository.findAll().toImmutableList() }
-        categorySuggestions.value = preloadDataLogic.categorySuggestions()
-
-        state.value = OnboardingState.CATEGORIES
-    }
-
-    private suspend fun completeOnboarding(
-        baseCurrency: IvyCurrency?
-    ) {
+    private fun completeOnboarding(scope: CoroutineScope) {
         sharedPrefs.putBoolean(SharedPrefs.ONBOARDING_COMPLETED, true)
 
         navigateOutOfOnboarding()
 
-        // the rest below is not UI stuff so I don't care
-        ioThread {
+        // Seeding and reminders are not UI, so they must not block the transition -
+        // but they run on the caller's scope so they die with the ViewModel.
+        scope.launch {
+            // A fresh install that skipped the import still needs somewhere to record
+            // money, so seed a default account and its categories. Harmless after an
+            // import, which brought its own.
+            if (accountDao.findAll().isEmpty()) {
+                preloadDataLogic.preloadAccounts()
+                preloadDataLogic.preloadCategories()
+            }
             transactionReminderLogic.scheduleReminder()
-
-            AssetCode.from(baseCurrency?.code ?: IvyCurrency.getDefault().code)
-                .onRight {
-                    syncExchangeRatesUseCase.sync(baseCurrency = it)
-                }
         }
-
-        resetState()
     }
-
-    private fun resetState() {
-        state.value = OnboardingState.SPLASH
-        opGoogleSignIn.value = null
-    }
+    // --------------------------------- Step 4 ---------------------------------------------------
 
     private fun navigateOutOfOnboarding() {
         nav.resetBackStack()
         nav.navigateTo(MainScreen)
+        state.value = OnboardingState.SPLASH
     }
-    // -------------------------------------- Routes ------------------------------------------------
 }

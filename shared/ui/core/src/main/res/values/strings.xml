@@ -482,4 +482,10 @@
     <string name="bill_paid">Your bill for %1$s %2$s has been paid</string>
     <string name="language">Language</string>
     <string name="advanced_features">Advanced features</string>
+    <string name="get_started">Get started</string>
+    <string name="import_your_data">Bring your data</string>
+    <string name="import_your_data_description">Import a backup from Ivy Wallet, or start with an empty wallet. Everything stays on this device.</string>
+    <string name="name_this_profile">Name this profile</string>
+    <string name="name_this_profile_description">This wallet belongs to one person. The name is how you tell your profile apart from the other one on this phone.</string>
+    <string name="profile_name">Profile name</string>
 </resources>

@@ -71,12 +71,34 @@ class ProfileRegistry @Inject constructor(
         return parsed.ifEmpty { listOf(defaultProfile()) }
     }
 
-    /** Registers [profile] if its id is unknown. Existing names are never overwritten. */
+    /**
+     * Registers [profile], or updates its name if it is still an unset placeholder.
+     *
+     * The placeholder rule matters: [ProfileId.DEFAULT] is always present
+     * implicitly, so a plain "skip if it exists" guard meant naming your own
+     * profile during onboarding silently did nothing. The owner typed a name, it
+     * was accepted, and it was never written.
+     *
+     * A name that is not the placeholder is treated as chosen and is left alone,
+     * so a later register() cannot clobber it.
+     */
     fun register(profile: Profile) {
         val existing = profiles()
-        if (existing.any { it.id == profile.id }) return
-        persist(existing + profile)
+        val current = existing.firstOrNull { it.id == profile.id }
+        when {
+            current == null -> persist(existing + profile)
+            isPlaceholder(current.name, profile.id) && current.name != profile.name ->
+                persist(existing.map { if (it.id == profile.id) profile else it })
+            else -> Unit
+        }
     }
+
+    /**
+     * True while [name] is still the auto-generated one, i.e. the user has not
+     * chosen anything yet.
+     */
+    private fun isPlaceholder(name: String, id: ProfileId): Boolean =
+        name.isBlank() || name == defaultNameFor(id)
 
     fun exists(id: ProfileId): Boolean = profiles().any { it.id == id }
 

@@ -134,6 +134,34 @@ class ProfileRegistryTest {
     }
 
     @Test
+    fun `naming the default profile actually persists the name`() {
+        // Regression, found by driving the real onboarding UI: typing a name was
+        // accepted on screen and then silently discarded. ProfileId.DEFAULT is
+        // always present implicitly, so the old "skip if it exists" guard meant
+        // onboarding's name never reached storage.
+        registry.register(Profile(ProfileId.DEFAULT, "Ryuen"))
+
+        registry.activeProfile().name shouldBe "Ryuen"
+        registry.profiles().single { it.id == ProfileId.DEFAULT }.name shouldBe "Ryuen"
+    }
+
+    @Test
+    fun `a name that is not the placeholder is not clobbered`() {
+        registry.register(Profile(ProfileId.DEFAULT, "Ryuen"))
+        registry.register(Profile(ProfileId.DEFAULT, "Something Else"))
+
+        registry.activeProfile().name shouldBe "Ryuen"
+    }
+
+    @Test
+    fun `registering a different id is unaffected by the placeholder rule`() {
+        registry.register(Profile(ProfileId.of("so"), "Ratna"))
+
+        registry.profiles().filter { it.id == ProfileId.of("so") }
+            .map { it.name } shouldContainExactly listOf("Ratna")
+    }
+
+    @Test
     fun `hasLocalData reflects a real database file, not registration`() {
         registry.register(Profile(ProfileId.of("so"), "Her"))
         files.add("so.db")
