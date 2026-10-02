@@ -502,7 +502,12 @@ private fun BoxWithConstraintsScope.UI(
 
     SyncServerModal(
         visible = syncModalVisible,
-        currentUrl = syncBaseUrl,
+        // Pre-filled with the owner's own deployed server so the common case is
+        // typing an email and a password, not transcribing a 35-character URL on
+        // a phone keyboard. Still fully editable, because a personal fork should
+        // be able to point at a different host - and a WRONG prefilled value is
+        // the risk here, so this one is verified live before being used.
+        currentUrl = syncBaseUrl.ifBlank { DEFAULT_SYNC_URL },
         currentProfile = syncProfile,
         dismiss = { syncModalVisible = false },
         onSignIn = onSyncSignIn,
@@ -775,6 +780,9 @@ private fun AppSwitch(
  * configured is exactly the failure that made the transfer picker confusing in
  * the first place.
  */
+/** Verified live 2026-10-02. Overridable in the dialog. */
+private const val DEFAULT_SYNC_URL = "https://astesias-pb.fly.dev"
+
 @Composable
 private fun SyncServerRow(
     baseUrl: String,
