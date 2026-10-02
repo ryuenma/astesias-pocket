@@ -77,6 +77,7 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.util.UUID
 import timber.log.Timber
 import javax.inject.Inject
@@ -84,6 +85,17 @@ import javax.inject.Inject
 @Suppress("LargeClass")
 @Stable
 @SuppressLint("StaticFieldLeak")
+/**
+ * Time-of-day stamped on a transaction when the user has not chosen one.
+ *
+ * NOON, not midnight. The stored value is a UTC instant, and local midnight is
+ * the worst possible choice: at UTC+7 (Indonesia) local 00:00 is 17:00 the
+ * PREVIOUS UTC day, which is exactly the off-by-one this fork inherits from
+ * upstream. Noon keeps the instant inside the same UTC day for any offset from
+ * -11 to +12, so the date the user picked is the date that is stored.
+ */
+private val DEFAULT_TIME_OF_DAY: LocalTime = LocalTime.of(12, 0)
+
 @HiltViewModel
 class EditTransactionViewModel @Inject constructor(
     @ApplicationContext
@@ -616,9 +628,11 @@ class EditTransactionViewModel @Inject constructor(
         dateTimePicker.pickDate(
             initialDate = loadedTransaction?.dateTime,
         ) { localDate ->
+            // Keep an existing time-of-day when there is one, so editing only the
+            // date of a transaction does not silently move it.
             val localTime = loadedTransaction().dateTime?.let {
                 with(timeConverter) { it.toLocalTime() }
-            } ?: timeProvider.localTimeNow()
+            } ?: DEFAULT_TIME_OF_DAY
             loadedTransaction = loadedTransaction().copy(
                 date = localDate,
             )

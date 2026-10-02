@@ -143,9 +143,6 @@ fun BoxWithConstraintsScope.EditTransactionScreen(screen: EditTransactionScreen)
         onSetDate = {
             viewModel.onEvent(EditTransactionViewEvent.OnChangeDate)
         },
-        onSetTime = {
-            viewModel.onEvent(EditTransactionViewEvent.OnChangeTime)
-        },
         onTitleChange = {
             viewModel.onEvent(EditTransactionViewEvent.OnTitleChanged(it))
         },
@@ -238,7 +235,6 @@ private fun BoxWithConstraintsScope.UI(
     onToAccountChange: (Account) -> Unit,
     onDueDateChange: (LocalDateTime?) -> Unit,
     onSetDate: () -> Unit,
-    onSetTime: () -> Unit,
     onSetTransactionType: (TransactionType) -> Unit,
 
     onCreateCategory: (CreateCategoryData) -> Unit,
@@ -403,7 +399,6 @@ private fun BoxWithConstraintsScope.UI(
             dateTime = dateTime,
             dueDateTime = dueDate,
             onEditDate = onSetDate,
-            onEditTime = onSetTime,
         )
 
         if (transactionType == TransactionType.TRANSFER && customExchangeRateState.showCard) {
@@ -734,7 +729,6 @@ private fun BoxWithConstraintsScope.Preview(isDark: Boolean = false) {
             onDuplicate = {},
             onCreateAccount = { },
             onSetDate = {},
-            onSetTime = {},
             onSetTransactionType = {},
             toDirectoryAccount = null,
             directoryAccounts = persistentListOf(),

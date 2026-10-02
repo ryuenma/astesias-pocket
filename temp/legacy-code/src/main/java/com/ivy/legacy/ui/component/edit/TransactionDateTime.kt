@@ -35,7 +35,6 @@ fun TransactionDateTime(
     dateTime: Instant?,
     dueDateTime: Instant?,
     onEditDate: () -> Unit,
-    onEditTime: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (dueDateTime == null || dateTime != null) {
@@ -84,18 +83,6 @@ fun TransactionDateTime(
                 }
             )
 
-            Text(
-                text = " " + with(timeFormatter) {
-                    localDateTime.toLocalTime().format()
-                },
-                style = UI.typo.nB2.style(
-                    color = UI.colors.pureInverse,
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                modifier = Modifier.clickable {
-                    onEditTime()
-                }
-            )
             Spacer(modifier = Modifier.width(24.dp))
         }
     }
@@ -109,8 +96,6 @@ private fun Preview() {
             dateTime = LocalTimeProvider.current.utcNow(),
             dueDateTime = null,
             onEditDate = {
-            },
-            onEditTime = {
             }
         )
     }
