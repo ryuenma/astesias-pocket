@@ -107,3 +107,8 @@ node_modules/*
 /.idea/AndroidProjectSystem.xml
 /.idea/runConfigurations.xml
 .idea
+
+# scratch database copies pulled off a device for inspection
+v13*.db
+v13*.db-wal
+v13*.db-shm
