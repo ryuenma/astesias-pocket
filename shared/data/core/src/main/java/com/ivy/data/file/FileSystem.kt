@@ -9,7 +9,9 @@ import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.io.InputStreamReader
+import java.io.PushbackInputStream
 import java.nio.charset.Charset
 import javax.inject.Inject
 
@@ -17,6 +19,11 @@ class FileSystem @Inject constructor(
     @ApplicationContext
     private val appContext: Context
 ) {
+    private companion object {
+        /** Longest BOM we sniff: UTF-16 is 2 bytes, UTF-8 is 3. */
+        const val MARK_LENGTH = 3
+    }
+
     fun writeToFile(uri: Uri, content: String): Either<Failure, Unit> = try {
         val contentResolver = appContext.contentResolver
 
@@ -113,20 +120,31 @@ class FileSystem @Inject constructor(
         appContext.getDatabasePath(dbFileName).exists()
 
     /**
-     * Peeks at the leading bytes and delegates the decision to [BackupEncoding].
+     * Detects the encoding from the leading bytes and returns a stream that still
+     * contains them, so the sniffed bytes are never dropped.
      *
-     * InputStream.mark() returns void, so there is no success flag to check;
-     * markSupported() is what says whether reset() will actually rewind.
+     * The obvious implementation - mark(3), read(mark), reset() - silently loses
+     * those 3 bytes, because [FileInputStream.markSupported] is false: mark() is a
+     * no-op and reset() throws, so the code must not rely on rewinding. A
+     * [java.io.PushbackInputStream] is used instead, which can always push bytes
+     * back regardless of the underlying stream's mark support.
+     *
+     * This was not theoretical. It broke every real backup: a UTF-16BE file starts
+     * `FE FF 00 7B`, so consuming 3 bytes removed the BOM *and* the first content
+     * byte, left the stream at an odd length, and Charsets.UTF_16 - with no BOM to
+     * go on - fell back to big endian over misaligned data. The owner's 6,538-row
+     * backup decoded to mojibake and the import failed. See RealBackupImportTest.
      */
-    private fun detectCharset(fileInputStream: FileInputStream): Charset {
-        val mark = ByteArray(3)
-        val markSupported = fileInputStream.markSupported()
-        fileInputStream.mark(3)
+    private fun detectCharsetAndRewind(fileInputStream: InputStream): Pair<Charset, InputStream> {
+        val mark = ByteArray(MARK_LENGTH)
         val read = fileInputStream.read(mark)
-        if (markSupported) fileInputStream.reset()
-
         val bytes = if (read <= 0) ByteArray(0) else mark.copyOf(read)
-        return BackupEncoding.detect(bytes)
+        val rewound = if (read > 0) {
+            PushbackInputStream(fileInputStream, MARK_LENGTH).apply { unread(mark, 0, read) }
+        } else {
+            fileInputStream
+        }
+        return BackupEncoding.detect(bytes) to rewound
     }
 
     @Throws(IOException::class)
@@ -134,8 +152,13 @@ class FileSystem @Inject constructor(
         fileInputStream: FileInputStream,
         charset: Charset?
     ): String {
-        val effective = charset ?: detectCharset(fileInputStream)
-        BufferedReader(InputStreamReader(fileInputStream, effective)).use { br ->
+        val (effective, stream) = if (charset != null) {
+            charset to fileInputStream
+        } else {
+            detectCharsetAndRewind(fileInputStream)
+        }
+
+        BufferedReader(InputStreamReader(stream, effective)).use { br ->
             val sb = StringBuilder()
             var line: String?
             while (br.readLine().also { line = it } != null) {

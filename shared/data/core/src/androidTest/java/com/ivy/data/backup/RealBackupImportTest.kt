@@ -28,12 +28,19 @@ import java.io.File
 /**
  * Runs the REAL import path against the owner's actual Ivy Wallet backup.
  *
- * The backup is read from `/sdcard/Download/` rather than committed, so personal
- * financial data never lands in version control. Push it first:
+ * The backup is pushed to the app under test's own external files dir rather than
+ * committed, so personal financial data never lands in version control. Push it
+ * there first (the path is resolved at runtime and printed in the failure message):
  *
  * ```
- * adb push IvyWalletBackup_20261001-2259.zip /sdcard/Download/
+ * adb push IvyWalletBackup_20261001-2259.zip \
+ *   /sdcard/Android/data/astesias.pocket.debug/files/
  * ```
+ *
+ * Not `/sdcard/Download/`: on API 33+ that path is unreadable to the app under
+ * test without a media/storage permission, so the import failed with
+ * "EACCES (Permission denied)". The app-private external dir needs no permission
+ * and is still per-app, so the backup is not committed either way.
  *
  * Why this test exists: Ivy Wallet hardcoded UTF-16 when reading backups and swallowed
  * every failure into an all-zero ImportResult, so a broken import looked exactly like
@@ -46,7 +53,7 @@ import java.io.File
 class RealBackupImportTest {
 
     private companion object {
-        const val BACKUP_PATH = "/sdcard/Download/IvyWalletBackup_20261001-2259.zip"
+        const val BACKUP_FILE = "IvyWalletBackup_20261001-2259.zip"
 
         // From profiling the owner's backup on 2026-10-01. Asserted rather than
         // assumed, so a changed fixture fails loudly instead of passing silently.
@@ -107,26 +114,42 @@ class RealBackupImportTest {
         )
     }
 
-
     @After
     fun closeDb() {
         db.close()
     }
 
+    // Must return Unit explicitly. With `fun x() = runBlocking { ... }` the return type
+    // is inferred from the block's last expression (`... shouldBe true` -> Boolean),
+    // and JUnit rejects any @Test method that does not return void, so the method
+    // is silently never executed.
     @Test
-    fun importsTheOwnersRealBackup() = runBlocking {
-        val backup = File(BACKUP_PATH)
+    fun importsTheOwnersRealBackup(): Unit = runBlocking {
+        // Resolved at runtime, not hardcoded: instrumented code runs inside the
+        // TARGET app's process (astesias.pocket.debug), so the only external files
+        // dir it can read is its own. A hardcoded path that names the test APK's
+        // dir exists but reads as absent.
+        val backupDir = requireNotNull(
+            InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null)
+        ) { "target app has no external files dir" }
+        val backup = File(backupDir, BACKUP_FILE)
         assertTrue(
-            "Backup not found at $BACKUP_PATH - run: " +
-                "adb push IvyWalletBackup_20261001-2259.zip /sdcard/Download/",
+            "Backup not found at ${backup.absolutePath} - run: " +
+                "adb push $BACKUP_FILE ${backup.absolutePath}/",
             backup.exists()
+        )
+        assertTrue(
+            "Backup at ${backup.absolutePath} is not readable by the test process",
+            backup.canRead()
         )
 
         val result = useCase.importBackupFile(backup.toUri()) {}
 
-        println("REAL BACKUP IMPORT -> error=${result.errorMessage} " +
-            "rows=${result.rowsFound} transactions=${result.transactionsImported} " +
-            "accounts=${result.accountsImported} categories=${result.categoriesImported}")
+        println(
+            "REAL BACKUP IMPORT -> error=${result.errorMessage} " +
+                "rows=${result.rowsFound} transactions=${result.transactionsImported} " +
+                "accounts=${result.accountsImported} categories=${result.categoriesImported}"
+        )
 
         // A silent failure previously produced all zeros with no reason given.
         result.errorMessage shouldBe null
