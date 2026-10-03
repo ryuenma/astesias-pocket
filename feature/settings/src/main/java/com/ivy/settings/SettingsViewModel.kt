@@ -23,6 +23,7 @@ import com.ivy.data.db.dao.write.WriteSettingsDao
 import com.ivy.data.model.primitive.AssetCode
 import com.ivy.domain.RootScreen
 import com.ivy.domain.usecase.csv.ExportCsvUseCase
+import com.ivy.domain.usecase.xlsx.ExportXlsxUseCase
 import com.ivy.domain.usecase.exchange.SyncExchangeRatesUseCase
 import com.ivy.frp.monad.Res
 import com.ivy.legacy.IvyWalletCtx
@@ -59,6 +60,7 @@ class SettingsViewModel @Inject constructor(
     private val updateSettingsAct: UpdateSettingsAct,
     private val settingsWriter: WriteSettingsDao,
     private val exportCsvUseCase: ExportCsvUseCase,
+    private val exportXlsxUseCase: ExportXlsxUseCase,
     @ApplicationContext private val context: Context
 ) : ComposeViewModel<SettingsState, SettingsEvent>() {
 
@@ -236,6 +238,7 @@ class SettingsViewModel @Inject constructor(
             is SettingsEvent.SetCurrency -> setCurrency(event.newCurrency)
             is SettingsEvent.SetName -> setName(event.newName)
             is SettingsEvent.ExportToCsv -> exportToCSV(event.rootScreen)
+            is SettingsEvent.ExportToXlsx -> exportToXlsx(event.rootScreen)
             is SettingsEvent.BackupData -> exportToZip(event.rootScreen)
             SettingsEvent.SwitchTheme -> switchTheme()
             is SettingsEvent.SetLockApp -> setLockApp(event.lockApp)
@@ -304,6 +307,27 @@ class SettingsViewModel @Inject constructor(
 
                 rootScreen.shareCSVFile(
                     fileUri = fileUri
+                )
+            }
+        }
+    }
+
+    private fun exportToXlsx(rootScreen: RootScreen) {
+        ivyContext.createNewFile(
+            "IvyWalletExport_${
+                timeNowUTC().getISOFormattedDateTime()
+            }.xlsx"
+        ) { fileUri ->
+            viewModelScope.launch {
+                exportXlsxUseCase.exportToFile(
+                    outputFile = fileUri
+                )
+
+                // The MIME type has to travel with the file or spreadsheet apps
+                // open it as plain text.
+                rootScreen.shareFile(
+                    fileUri = fileUri,
+                    mimeType = XLSX_MIME_TYPE
                 )
             }
         }
@@ -427,5 +451,14 @@ class SettingsViewModel @Inject constructor(
             intent.data = Uri.fromParts("package", context.packageName, null)
             context.applicationContext.startActivity(intent)
         }
+    }
+
+    private companion object {
+        /**
+         * Official xlsx MIME type, which is what makes Google Sheets and Excel
+         * treat the file as a workbook rather than as plain text.
+         */
+        const val XLSX_MIME_TYPE =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     }
 }

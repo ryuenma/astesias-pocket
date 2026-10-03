@@ -111,6 +111,9 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         onExportToCSV = {
             viewModel.onEvent(SettingsEvent.ExportToCsv(rootScreen))
         },
+        onExportToXlsx = {
+            viewModel.onEvent(SettingsEvent.ExportToXlsx(rootScreen))
+        },
         onSetLockApp = {
             viewModel.onEvent(SettingsEvent.SetLockApp(it))
         },
@@ -180,6 +183,7 @@ private fun BoxWithConstraintsScope.UI(
     onSetName: (String) -> Unit = {},
     onBackupData: () -> Unit = {},
     onExportToCSV: () -> Unit = {},
+    onExportToXlsx: () -> Unit = {},
     onSetLockApp: (Boolean) -> Unit = {},
     onSetShowNotifications: (Boolean) -> Unit = {},
     onSetTreatTransfersAsIncExp: (Boolean) -> Unit = {},
@@ -276,6 +280,20 @@ private fun BoxWithConstraintsScope.UI(
             val nav = navigation()
             ExportCSV {
                 onExportToCSV()
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Spacer(Modifier.height(12.dp))
+
+            SettingsDefaultButton(
+                // Same icon as the CSV row: it is a generic export glyph, and
+                // inventing a near-duplicate vector for one button is noise.
+                icon = R.drawable.ic_export_csv,
+                text = stringResource(R.string.export_xlsx),
+                iconPadding = 8.dp
+            ) {
+                onExportToXlsx()
             }
 
             Spacer(Modifier.height(12.dp))

@@ -383,11 +383,15 @@ class RootActivity : AppCompatActivity(), RootScreen {
     }
 
     override fun shareCSVFile(fileUri: Uri) {
+        shareFile(fileUri, "text/csv")
+    }
+
+    override fun shareFile(fileUri: Uri, mimeType: String) {
         val intent = Intent.createChooser(
             Intent().apply {
                 action = Intent.ACTION_SEND
                 putExtra(Intent.EXTRA_STREAM, fileUri)
-                type = "text/csv"
+                type = mimeType
             },
             null
         )

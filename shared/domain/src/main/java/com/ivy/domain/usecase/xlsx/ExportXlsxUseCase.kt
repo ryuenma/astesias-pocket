@@ -20,13 +20,18 @@ import javax.inject.Inject
  */
 class ExportXlsxUseCase @Inject constructor(
     private val exportCsvUseCase: ExportCsvUseCase,
+    private val transactionRepository: TransactionRepository,
     private val fileSystem: FileSystem,
     private val dispatchers: DispatchersProvider
 ) {
 
     suspend fun exportToFile(
         outputFile: Uri,
-        exportScope: suspend TransactionRepository.() -> List<Transaction>
+        // Same default as the CSV export, so both cover every transaction when
+        // no scope is given.
+        exportScope: suspend TransactionRepository.() -> List<Transaction> = {
+            transactionRepository.findAll()
+        }
     ): Either<FileSystem.Failure, Unit> = withContext(dispatchers.io) {
         val bytes = XlsxWriter.write(exportCsvUseCase.exportRows(exportScope))
         fileSystem.writeToFile(outputFile, bytes)
