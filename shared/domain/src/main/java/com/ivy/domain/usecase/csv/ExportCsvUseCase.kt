@@ -48,6 +48,27 @@ class ExportCsvUseCase @Inject constructor(
         fileSystem.writeToFile(outputFile, csv)
     }
 
+    /**
+     * The same rows the CSV export writes, as ordered cells.
+     *
+     * Public so [com.ivy.domain.usecase.xlsx.ExportXlsxUseCase] renders exactly
+     * what CSV renders instead of re-deriving the columns.
+     */
+    suspend fun exportRows(
+        exportScope: suspend TransactionRepository.() -> List<Transaction>
+    ): List<List<String?>> = withContext(dispatchers.io) {
+        val transactions = transactionRepository.exportScope()
+        val accountsMap = accountRepository.findAll().associateBy(Account::id)
+        val categoriesMap = categoryRepository.findAll().associateBy(Category::id)
+
+        buildList {
+            add(IvyCsvRow.Columns)
+            for (trn in transactions) {
+                add(trn.toIvyCsvRow().toCells(accountsMap, categoriesMap))
+            }
+        }
+    }
+
     suspend fun exportCsv(
         exportScope: suspend TransactionRepository.() -> List<Transaction>
     ): String = withContext(dispatchers.io) {
@@ -70,10 +91,17 @@ class ExportCsvUseCase @Inject constructor(
         }
     }
 
-    private fun IvyCsvRow.toCsvString(
+    /**
+     * Flattens a row into ordered cells, resolving ids to names.
+     *
+     * Shared by both renderers. If XLSX built its own row mapping, the two
+     * exports would agree today and silently drift the first time someone
+     * reordered a column.
+     */
+    private fun IvyCsvRow.toCells(
         accountsMap: Map<AccountId, Account>,
         categoriesMap: Map<CategoryId, Category>,
-    ): String = csvRow {
+    ): List<String?> = cells {
         // Date
         csvAppend(date?.csvFormat(timeConverter))
         // Title
@@ -106,16 +134,22 @@ class ExportCsvUseCase @Inject constructor(
         csvAppend(id.value.toString())
     }
 
+    private fun IvyCsvRow.toCsvString(
+        accountsMap: Map<AccountId, Account>,
+        categoriesMap: Map<CategoryId, Category>,
+    ): String = toCells(accountsMap, categoriesMap)
+        .joinToString(separator = CSV_SEPARATOR) { it?.escapeCsvString() ?: "" }
+
     @OptIn(ExperimentalTypeInference::class)
-    private fun csvRow(@BuilderInference build: CsvRowScope.() -> Unit): String {
-        val columns = mutableListOf<String>()
+    private inline fun cells(@BuilderInference build: CsvRowScope.() -> Unit): List<String?> {
+        val columns = mutableListOf<String?>()
         val rowScope = object : CsvRowScope {
             override fun csvAppend(value: String?) {
-                columns.add(value?.escapeCsvString() ?: "")
+                columns.add(value)
             }
         }
         rowScope.build()
-        return columns.joinToString(separator = CSV_SEPARATOR)
+        return columns
     }
 
     private fun String.escapeCsvString(): String = try {

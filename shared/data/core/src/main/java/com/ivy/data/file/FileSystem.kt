@@ -35,6 +35,29 @@ class FileSystem @Inject constructor(
     }
 
     /**
+     * Writes raw bytes, for binary exports such as .xlsx.
+     *
+     * The String overload writes UTF-16 and is not usable for binary: a ZIP
+     * container passed through a charset encoder is corrupted, and it would fail
+     * as "the file will not open in Excel" rather than as an error here.
+     */
+    fun writeToFile(uri: Uri, content: ByteArray): Either<Failure, Unit> = try {
+        val contentResolver = appContext.contentResolver
+
+        contentResolver.openFileDescriptor(uri, "w")?.use {
+            FileOutputStream(it.fileDescriptor).use { fOut ->
+                fOut.write(content)
+                fOut.flush()
+            }
+        }
+        Either.Right(Unit)
+    } catch (e: FileNotFoundException) {
+        Either.Left(Failure.FileNotFound(e))
+    } catch (e: Exception) {
+        Either.Left(Failure.IO(e))
+    }
+
+    /**
      * Reads [uri] as text, detecting the encoding from a byte-order mark when one
      * is present.
      *
