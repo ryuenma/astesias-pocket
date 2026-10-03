@@ -7,11 +7,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
     // Fork: com.google.gms.google-services and com.google.firebase.crashlytics are
-    // intentionally NOT applied. Ivy's app/google-services.json points at Ivy's own
-    // "ivy-widget" Firebase project, so applying the plugin keyed the build to
-    // com.ivy.wallet and would have sent this fork's crash reports to Ivy. Nothing in
-    // Astesia's Pocket talks to Firebase; Crashlytics helpers now log locally via
-    // Timber (see temp/legacy-code/.../FirebaseExt.kt).
+    // intentionally NOT applied, and Ivy's app/google-services.json has been DELETED.
+    // That file pointed at Ivy's own "ivy-widget" Firebase project, so applying the
+    // plugin would have keyed this build to com.ivy.wallet and shipped this fork's
+    // crash reports to Ivy. Nothing in Astesia's Pocket talks to Firebase, so the
+    // config file, the Firebase SDK deps and their version-catalog entries are all
+    // gone. Crashlytics-shaped helpers now log locally via Timber
+    // (see temp/legacy-code/.../FirebaseExt.kt).
     id("io.gitlab.arturbosch.detekt")
 }
 
@@ -159,7 +161,6 @@ dependencies {
     implementation(libs.bundles.compose)
     implementation(libs.bundles.activity)
     implementation(libs.bundles.google)
-    implementation(libs.bundles.firebase)
     implementation(libs.datastore)
     implementation(libs.androidx.security)
     implementation(libs.androidx.biometrics)
