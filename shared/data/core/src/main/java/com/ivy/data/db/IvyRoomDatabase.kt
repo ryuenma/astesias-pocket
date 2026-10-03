@@ -16,6 +16,7 @@ import com.ivy.data.db.dao.read.TagDao
 import com.ivy.data.db.dao.read.TagAssociationDao
 import com.ivy.data.db.dao.read.TransactionDao
 import com.ivy.data.db.dao.read.DirectoryAccountDao
+import com.ivy.data.db.dao.read.PendingTransferDao
 import com.ivy.data.db.dao.read.UserDao
 import com.ivy.data.db.dao.write.WriteAccountDao
 import com.ivy.data.db.dao.write.WriteBudgetDao
@@ -30,6 +31,7 @@ import com.ivy.data.db.dao.write.WriteTagAssociationDao
 import com.ivy.data.db.dao.write.WriteTransactionDao
 import com.ivy.data.db.entity.AccountEntity
 import com.ivy.data.db.entity.DirectoryAccountEntity
+import com.ivy.data.db.entity.PendingTransferEntity
 import com.ivy.data.db.entity.BudgetEntity
 import com.ivy.data.db.entity.CategoryEntity
 import com.ivy.data.db.entity.ExchangeRateEntity
@@ -49,6 +51,7 @@ import com.ivy.data.db.migration.Migration128to129_DeleteIsDeleted
 import com.ivy.data.db.migration.Migration129to130_LoanIncludeNote
 import com.ivy.data.db.migration.Migration130to131_CrossProfileTransfers
 import com.ivy.data.db.migration.Migration131to132_CategorySubcategories
+import com.ivy.data.db.migration.Migration132to133_PendingTransfers
 import com.ivy.domain.db.RoomTypeConverters
 import com.ivy.domain.db.migration.Migration105to106_TrnRecurringRules
 import com.ivy.domain.db.migration.Migration106to107_Wishlist
@@ -76,7 +79,8 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
         TransactionEntity::class, CategoryEntity::class,
         SettingsEntity::class, PlannedPaymentRuleEntity::class,
         UserEntity::class, ExchangeRateEntity::class, BudgetEntity::class,
-        LoanEntity::class, LoanRecordEntity::class, TagEntity::class, TagAssociationEntity::class
+        LoanEntity::class, LoanRecordEntity::class, TagEntity::class, TagAssociationEntity::class,
+        PendingTransferEntity::class,
     ],
     autoMigrations = [
         AutoMigration(
@@ -85,7 +89,7 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
             spec = IvyRoomDatabase.DeleteSEMigration::class
         )
     ],
-    version = 132,
+    version = 133,
     exportSchema = true
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -116,6 +120,7 @@ abstract class IvyRoomDatabase : RoomDatabase() {
     abstract val writeTagAssociationDao: WriteTagAssociationDao
 
     abstract val directoryAccountDao: DirectoryAccountDao
+    abstract val pendingTransferDao: PendingTransferDao
 
     companion object {
         /**
@@ -152,7 +157,8 @@ abstract class IvyRoomDatabase : RoomDatabase() {
             Migration128to129_DeleteIsDeleted(),
             Migration129to130_LoanIncludeNote(),
             Migration130to131_CrossProfileTransfers(),
-            Migration131to132_CategorySubcategories()
+            Migration131to132_CategorySubcategories(),
+            Migration132to133_PendingTransfers()
         )
 
         /**

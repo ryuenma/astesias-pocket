@@ -21,6 +21,7 @@ import com.ivy.data.model.getToAccount
 import com.ivy.data.model.primitive.NotBlankTrimmedString
 import com.ivy.data.model.primitive.PositiveDouble
 import com.ivy.data.repository.AccountRepository
+import timber.log.Timber
 import java.time.Instant
 import javax.inject.Inject
 
@@ -98,14 +99,40 @@ class TransactionMapper @Inject constructor(
                 }
 
                 val toAccount = accountRepository.findById(toAccountId)
-                ensureNotNull(toAccount) {
-                    "No destination account associated with transaction '${this@toDomain}'"
+
+                // A cross-profile transfer names an account in SOMEONE ELSE'S ledger.
+                // That id cannot resolve here, and must not be required to: the mapper
+                // reports failure with an Either and every ledger read discards those
+                // with `mapNotNull`, so an unresolvable destination does not surface as
+                // an error - it makes the transaction SILENTLY DISAPPEAR from the
+                // owner's own ledger while still sitting in the database. That would
+                // break the one promise this feature rests on: she can record a
+                // transfer to her partner freely and immediately, offline or not.
+                //
+                // So the destination asset falls back to the source account's. These
+                // accounts may hold different currencies and the honest statement is
+                // that we do not know the rate - the amount carried is the money that
+                // actually left, never a fabricated conversion. `senderLeg` likewise
+                // leaves `toAmount` null for exactly this reason.
+                //
+                // A NULL `counterpartProfileId` preserves the original strictness: an
+                // ordinary intra-profile transfer pointing at a missing account is
+                // genuinely corrupt data and is still rejected here.
+                if (toAccount == null) {
+                    ensure(counterpartProfileId != null) {
+                        "No destination account associated with transaction '${this@toDomain}'"
+                    }
+                    Timber.i(
+                        "Cross-profile transfer $id: destination $toAccountId belongs to " +
+                            "profile $counterpartProfileId and is not in this ledger; using " +
+                            "the source account's asset for the destination value"
+                    )
                 }
 
                 val toValue = PositiveValue(
                     amount = toAmount?.let(PositiveDouble::from)?.getOrNull()
                         ?: fromValue.amount,
-                    asset = toAccount.asset
+                    asset = toAccount?.asset ?: fromValue.asset
                 )
 
                 Transfer(
@@ -167,3 +194,20 @@ class TransactionMapper @Inject constructor(
         )
     }
 }
+
+/**
+ * Cross-profile legs written through this mapper LOSE their counterpart and
+ * correlation id.
+ *
+ * An honest statement of a known gap, not a claim of correctness: the domain
+ * `Transaction` has no `counterpartProfileId` / `linkedTransactionId` field, so
+ * there is nothing here to read them from and they come out null.
+ *
+ * This does not affect the owner-confirmation path, which writes legs directly as
+ * `TransactionEntity` through `WriteTransactionDao` and therefore sets both fields
+ * explicitly. It WOULD affect a future flow that round-trips a cross-profile leg
+ * through the domain model, and it is worth fixing then - the correlation id is
+ * the idempotency key, and a null one cannot be recognised as a replay.
+ * `CrossProfileTransferMapperTest` pins the read side, so a regression there is
+ * caught by a test rather than discovered by a user.
+ */

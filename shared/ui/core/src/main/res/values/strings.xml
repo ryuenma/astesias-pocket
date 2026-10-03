@@ -499,6 +499,13 @@
     <string name="belongs_to">Belongs to %1$s</string>
     <string name="change">Change</string>
 
+    <!-- Incoming transfers awaiting confirmation -->
+    <string name="pending_transfers_title">Confirm incoming</string>
+    <string name="pending_transfers_description">These transfers have been sent to you but aren’t in your balance yet. Accept one to record it, or decline it.</string>
+    <string name="no_pending_transfers">Nothing to confirm</string>
+    <string name="pending_transfer_accept">Accept</string>
+    <string name="pending_transfer_decline">Decline</string>
+
     <!-- Sync server -->
     <string name="sync_server">Sync with your partner</string>
     <string name="sync_server_explainer">Sign in to share your account list, so a transfer to them can name a real destination. Your password is used once and never stored.</string>

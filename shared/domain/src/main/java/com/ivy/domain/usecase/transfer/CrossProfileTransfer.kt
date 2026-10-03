@@ -21,6 +21,12 @@ object CrossProfileTransfer {
     /**
      * Builds the sender's leg: money leaving one of my accounts for one of hers.
      *
+     * Never gated on the counterpart's confirmation. The money has already moved
+     * by the time she could possibly tap anything, so a row that only appears once
+     * she accepts would be a false statement about money that is already gone.
+     * This is recorded first and unconditionally; her acceptance only ever affects
+     * HER ledger. See [TransferInbox].
+     *
      * [toAmount] is left null rather than copied from [amount]. These accounts may
      * hold different currencies, and inventing a conversion rate here would be
      * worse than admitting we do not know it - the receiver's leg carries what
@@ -60,6 +66,11 @@ object CrossProfileTransfer {
      * [toAccountId] is null: from her side the money came from outside her wallet
      * rather than from another of her accounts, and there is no local account to
      * name.
+     *
+     * This is the CONFIRMED leg: it is only ever built once the counterpart has
+     * accepted. Before that the money exists as a pending item and nothing else,
+     * so a reader of her ledger can never mistake an unconfirmed claim for a real
+     * transaction. See [TransferInbox].
      */
     fun receiverLeg(
         legId: UUID,

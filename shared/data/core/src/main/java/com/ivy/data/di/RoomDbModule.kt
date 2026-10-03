@@ -8,6 +8,7 @@ import com.ivy.data.db.dao.read.AccountDao
 import com.ivy.data.db.dao.read.BudgetDao
 import com.ivy.data.db.dao.read.CategoryDao
 import com.ivy.data.db.dao.read.DirectoryAccountDao
+import com.ivy.data.db.dao.read.PendingTransferDao
 import com.ivy.data.db.dao.read.ExchangeRatesDao
 import com.ivy.data.db.dao.read.LoanDao
 import com.ivy.data.db.dao.read.LoanRecordDao
@@ -126,6 +127,11 @@ object RoomDbModule {
     @Provides
     fun provideDirectoryAccountDao(db: IvyRoomDatabase): DirectoryAccountDao {
         return db.directoryAccountDao
+    }
+
+    @Provides
+    fun providePendingTransferDao(db: IvyRoomDatabase): PendingTransferDao {
+        return db.pendingTransferDao
     }
 
     @Provides
