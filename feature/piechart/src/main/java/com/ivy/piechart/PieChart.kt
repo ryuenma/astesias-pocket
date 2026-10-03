@@ -109,7 +109,7 @@ fun PieChart(
 
 private class PieChartView(context: Context) : View(context) {
     private var categoryAmounts = emptyList<CategoryAmount>()
-    private var paints = mapOf<Category?, Paint>()
+    private var paints = mapOf<CategoryId?, Paint>()
     private var totalAmount = 0.0
 
     val rectangle = RectF(
@@ -138,7 +138,7 @@ private class PieChartView(context: Context) : View(context) {
                 val color = if (selectedCategory == null) {
                     categoryColor
                 } else {
-                    if (selectedCategory.category == category) {
+                    if (selectedCategory.category.id == category?.id) {
                         categoryColor
                     } else {
                         categoryColor.copy(
@@ -147,7 +147,11 @@ private class PieChartView(context: Context) : View(context) {
                     }
                 }
 
-                category to paintFor(
+                // Keyed by id, not by Category. Category is a data class and
+                // its equals now includes parentId, so two instances of the
+                // same row can compare unequal - a look-up miss here would
+                // `continue` in onDraw and silently drop the slice.
+                category?.id to paintFor(
                     color = color
                 )
             }
@@ -174,7 +178,7 @@ private class PieChartView(context: Context) : View(context) {
         zones.clear()
 
         for (categoryAmount in categoryAmounts) {
-            val paint = paints[categoryAmount.category] ?: continue
+            val paint = paints[categoryAmount.category?.id] ?: continue
             val amount = categoryAmount.amount
 
             if (amount == 0.0) continue

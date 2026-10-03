@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.ivy.base.legacy.Transaction
 import com.ivy.base.legacy.stringRes
 import com.ivy.base.model.TransactionType
+import com.ivy.data.category.CategoryTree
 import com.ivy.data.model.Category
 import com.ivy.data.model.CategoryId
 import com.ivy.data.model.primitive.ColorInt
@@ -140,61 +141,73 @@ class PieChartAct @Inject constructor(
     }
 
     @Pure
-    private suspend fun calculateCategoryAmounts(
-        type: TransactionType,
-        baseCurrency: String,
-        addAssociatedTransToCategoryAmt: Boolean = false,
+        private suspend fun calculateCategoryAmounts(
+            type: TransactionType,
+            baseCurrency: String,
+            addAssociatedTransToCategoryAmt: Boolean = false,
 
-        @SideEffect
-        allCategories: suspend () -> List<Category?>,
+            @SideEffect
+            allCategories: suspend () -> List<Category?>,
 
-        @SideEffect
-        transactions: suspend () -> List<Transaction>,
+            @SideEffect
+            transactions: suspend () -> List<Transaction>,
 
-        @SideEffect
-        accountsUsed: suspend () -> List<Account>,
-    ): List<CategoryAmount> {
-        val trans = transactions()
-        val accUsed = accountsUsed()
+            @SideEffect
+            accountsUsed: suspend () -> List<Account>,
+        ): List<CategoryAmount> {
+            val trans = transactions()
+            val accUsed = accountsUsed()
+            val categories = allCategories().filterNotNull()
 
-        val catAmtList = allCategories thenMap { category ->
-            val categoryTransactions = asyncIo {
-                if (addAssociatedTransToCategoryAmt) {
-                    trans.filter {
-                        it.type == type && it.categoryId == category?.id?.value
+            // One slice per PARENT, children rolled up into it. Iterating the
+            // roots rather than every category is what keeps the chart summing
+            // to the real total: a child's spending is already inside its
+            // parent's slice via the rollup, so drawing the child as its own
+            // slice would count it twice.
+            val tree = CategoryTree.of(categories)
+            val sliceCategories: List<Category?> = tree.roots + null
+
+            // thenMap/thenFilter are extensions on `suspend () -> List<B>`, so the
+        // receiver has to stay a suspend lambda.
+        val catAmtList = suspend { sliceCategories } thenMap { category ->
+                val categoryTransactions = asyncIo {
+                    if (addAssociatedTransToCategoryAmt) {
+                        trans.filter {
+                            it.type == type && tree.matches(it.categoryId, category)
+                        }
+                    } else {
+                        emptyList()
                     }
-                } else {
-                    emptyList()
                 }
+
+                val catIncomeExpense = categoryIncomeWithAccountFiltersAct(
+                    LegacyCategoryIncomeWithAccountFiltersAct.Input(
+                        transactions = trans,
+                        accountFilterList = accUsed,
+                        category = category,
+                        baseCurrency = baseCurrency,
+                        allCategories = categories,
+                    )
+                )
+
+                CategoryAmount(
+                    category = category,
+                    amount = when (type) {
+                        TransactionType.INCOME -> catIncomeExpense.income.toDouble()
+                        TransactionType.EXPENSE -> catIncomeExpense.expense.toDouble()
+                        else -> error("not supported transactionType - $type")
+                    },
+                    associatedTransactions = categoryTransactions.await(),
+                    isCategoryUnspecified = category == null
+                )
+            } thenFilter { catAmt ->
+                catAmt.amount != 0.0
+            } then {
+                it.sortedByDescending { ca -> ca.amount }
             }
 
-            val catIncomeExpense = categoryIncomeWithAccountFiltersAct(
-                LegacyCategoryIncomeWithAccountFiltersAct.Input(
-                    transactions = trans,
-                    accountFilterList = accUsed,
-                    category = category,
-                    baseCurrency = baseCurrency
-                )
-            )
-
-            CategoryAmount(
-                category = category,
-                amount = when (type) {
-                    TransactionType.INCOME -> catIncomeExpense.income.toDouble()
-                    TransactionType.EXPENSE -> catIncomeExpense.expense.toDouble()
-                    else -> error("not supported transactionType - $type")
-                },
-                associatedTransactions = categoryTransactions.await(),
-                isCategoryUnspecified = category == null
-            )
-        } thenFilter { catAmt ->
-            catAmt.amount != 0.0
-        } then {
-            it.sortedByDescending { ca -> ca.amount }
+            return catAmtList()
         }
-
-        return catAmtList()
-    }
 
     @Pure
     private suspend fun calculateTotalAmount(

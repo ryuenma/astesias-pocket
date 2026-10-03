@@ -169,6 +169,13 @@ class CategoriesViewModel @Inject constructor(
 
     private suspend fun loadCategories() {
         com.ivy.legacy.utils.scopedIOThread { scope ->
+            // Deliberately NOT rolled up. This screen renders one row per
+            // category, parents and subcategories alike, so a parent's row
+            // sits directly above its child's. Rolling up would show the
+            // child's spending twice and make the rows stop summing to the
+            // real total. The pie chart and budgets DO roll up - there a
+            // parent is the only unit shown, so its row has to contain the
+            // whole subtree. See CategoryTree.
             val categories = categoryRepository.findAll().mapAsync(scope) {
                 val catIncomeExpense = categoryIncomeWithAccountFiltersAct(
                     LegacyCategoryIncomeWithAccountFiltersAct.Input(

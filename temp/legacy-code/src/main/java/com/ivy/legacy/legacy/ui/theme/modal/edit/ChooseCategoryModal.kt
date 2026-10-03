@@ -3,6 +3,7 @@ package com.ivy.wallet.ui.theme.modal.edit
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,14 +22,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.ivy.data.category.CategoryTree
 import com.ivy.data.model.Category
 import com.ivy.data.model.CategoryId
 import com.ivy.data.model.primitive.ColorInt
@@ -73,6 +78,19 @@ fun BoxWithConstraintsScope.ChooseCategoryModal(
         mutableStateOf(initialCategory)
     }
 
+    // Which parents are showing their children. Seeded from the initial
+    // category, so reopening the modal on a transaction filed under a
+    // subcategory shows that subcategory instead of hiding it one level up.
+    var expandedIds by remember(initialCategory) {
+        mutableStateOf(
+            setOfNotNull(
+                initialCategory
+                    ?.takeIf { it.parentId != null }
+                    ?.parentId
+            )
+        )
+    }
+
     IvyModal(
         id = id,
         visible = visible,
@@ -103,6 +121,14 @@ fun BoxWithConstraintsScope.ChooseCategoryModal(
         CategoryPicker(
             categories = categories,
             selectedCategory = selectedCategory,
+            expandedIds = expandedIds,
+            onToggleExpanded = { id ->
+                expandedIds = if (id in expandedIds) {
+                    expandedIds - id
+                } else {
+                    expandedIds + id
+                }
+            },
             showCategoryModal = showCategoryModal,
             onEditCategory = {
                 showCategoryModal(it)
@@ -140,13 +166,34 @@ private fun save(
 private fun CategoryPicker(
     categories: List<Category>,
     selectedCategory: Category?,
+    expandedIds: Set<CategoryId>,
+    onToggleExpanded: (CategoryId) -> Unit,
     showCategoryModal: (Category?) -> Unit,
     onEditCategory: (Category) -> Unit,
     onSelected: (Category?) -> Unit,
 ) {
-    val data = mutableListOf<Any>()
-    data.addAll(categories)
-    data.add(AddNewCategory())
+    // A category with children is an ordinary Category that happens to own
+    // other categories, so the tree is derived from parentId rather than from
+    // a second list the caller would have to keep in sync. See CategoryTree
+    // for why the tree is built here instead of trusting findRoots().
+    val tree = remember(categories) { CategoryTree.of(categories) }
+
+    // Flattened to what is visible right now: every parent, plus the children
+    // of whichever parents are expanded. WrapContentRow is a single flow
+    // layout, so the nesting is carried by this row model plus an indent
+    // rather than by nested containers.
+    val data = remember(tree, expandedIds) {
+        buildList {
+            tree.roots.forEach { parent ->
+                val children = tree.childrenOf(parent)
+                add(PickerRow.Parent(category = parent, hasChildren = children.isNotEmpty()))
+                if (parent.id in expandedIds) {
+                    children.forEach { add(PickerRow.Child(category = it)) }
+                }
+            }
+            add(PickerRow.AddNew)
+        }
+    }
 
     WrapContentRow(
         modifier = Modifier
@@ -156,15 +203,20 @@ private fun CategoryPicker(
         items = data
     ) {
         when (it) {
-            is Category -> {
+            is PickerRow.Parent -> {
                 CategoryButton(
-                    category = it,
-                    selected = it == selectedCategory,
+                    category = it.category,
+                    selected = it.category.id == selectedCategory?.id,
+                    hasChildren = it.hasChildren,
+                    expanded = it.category.id in expandedIds,
                     onClick = {
-                        onSelected(it)
+                        onSelected(it.category)
                     },
                     onLongClick = {
-                        onEditCategory(it)
+                        onEditCategory(it.category)
+                    },
+                    onToggleExpand = {
+                        onToggleExpanded(it.category.id)
                     },
                     onDeselect = {
                         onSelected(null)
@@ -172,13 +224,48 @@ private fun CategoryPicker(
                 )
             }
 
-            is AddNewCategory -> {
+            is PickerRow.Child -> {
+                CategoryButton(
+                    category = it.category,
+                    selected = it.category.id == selectedCategory?.id,
+                    indent = true,
+                    onClick = {
+                        onSelected(it.category)
+                    },
+                    onLongClick = {
+                        onEditCategory(it.category)
+                    },
+                    onToggleExpand = { },
+                    onDeselect = {
+                        onSelected(null)
+                    }
+                )
+            }
+
+            is PickerRow.AddNew -> {
                 AddNewButton {
                     showCategoryModal(null)
                 }
             }
         }
     }
+}
+
+/**
+ * One rendered row. [Child] is only ever produced for a category
+ * [CategoryTree.childrenOf] returned, so a subcategory leaking into the top
+ * level is impossible by construction rather than by filtering afterwards.
+ */
+private sealed interface PickerRow {
+    data class Parent(
+        val category: Category,
+        val hasChildren: Boolean,
+    ) : PickerRow
+
+    data class Child(val category: Category) : PickerRow
+
+    /** Not a category, so it carries no Category - hence no shared `category`. */
+    data object AddNew : PickerRow
 }
 
 @ExperimentalFoundationApi
@@ -189,6 +276,10 @@ private fun CategoryButton(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onDeselect: () -> Unit,
+    onToggleExpand: () -> Unit,
+    indent: Boolean = false,
+    hasChildren: Boolean = false,
+    expanded: Boolean = false,
 ) {
     val categoryColor = category.color.value.toComposeColor()
 
@@ -196,6 +287,12 @@ private fun CategoryButton(
 
     Row(
         modifier = Modifier
+            .thenIf(indent) {
+                // Children sit one level in. WrapContentRow is a flat flow, so
+                // this indent is the only signal that the chip belongs to the
+                // parent above it.
+                padding(start = 20.dp)
+            }
             .thenIf(selected) {
                 drawColoredShadow(categoryColor)
             }
@@ -243,6 +340,33 @@ private fun CategoryButton(
             )
         )
 
+        if (hasChildren) {
+            // Expanding is a separate hit target from selecting: tapping the
+            // chip body still picks the parent, which is what anyone not
+            // drilling down expects, and it leaves long-press-to-edit exactly
+            // where it was.
+            Icon(
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(20.dp)
+                    .rotate(if (expanded) 180f else 0f)
+                    .clip(UI.shapes.rFull)
+                    .clickable(onClick = onToggleExpand)
+                    .testTag("choose_category_expand_button"),
+                painter = painterResource(id = R.drawable.ic_expand_more),
+                contentDescription = if (expanded) {
+                    "collapse ${category.name.value}"
+                } else {
+                    "expand ${category.name.value}"
+                },
+                tint = if (selected) {
+                    findContrastTextColor(categoryColor)
+                } else {
+                    UI.colors.mediumInverse
+                }
+            )
+        }
+
         if (selected) {
             val deselectBtnBackground = findContrastTextColor(categoryColor)
             IvyCircleButton(
@@ -281,35 +405,41 @@ fun AddNewButton(
     )
 }
 
-@Deprecated("Old design system. Use `:ivy-design` and Material3")
-private class AddNewCategory
-
 @ExperimentalFoundationApi
 @Preview
 @Composable
 private fun PreviewChooseCategoryModal() {
     IvyWalletPreview {
+        val food = Category(
+            name = NotBlankTrimmedString.unsafe("Food"),
+            color = ColorInt(Ivy.toArgb()),
+            icon = null,
+            id = CategoryId(UUID.randomUUID()),
+            orderNum = 0.0,
+        )
         val categories = mutableListOf(
+            food,
             Category(
-                name = NotBlankTrimmedString.unsafe("Test"),
-                color = ColorInt(Ivy.toArgb()),
+                name = NotBlankTrimmedString.unsafe("Restaurants"),
+                color = ColorInt(Orange.toArgb()),
                 icon = null,
                 id = CategoryId(UUID.randomUUID()),
-                orderNum = 0.0,
+                orderNum = 1.0,
+                parentId = food.id,
             ),
             Category(
                 name = NotBlankTrimmedString.unsafe("Second"),
                 color = ColorInt(Orange.toArgb()),
                 icon = null,
                 id = CategoryId(UUID.randomUUID()),
-                orderNum = 0.0,
+                orderNum = 2.0,
             ),
             Category(
                 name = NotBlankTrimmedString.unsafe("Third"),
                 color = ColorInt(Red.toArgb()),
                 icon = null,
                 id = CategoryId(UUID.randomUUID()),
-                orderNum = 0.0,
+                orderNum = 3.0,
             ),
         )
 

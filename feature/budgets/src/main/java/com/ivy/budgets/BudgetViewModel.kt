@@ -12,6 +12,7 @@ import com.ivy.base.time.TimeConverter
 import com.ivy.base.time.TimeProvider
 import com.ivy.budgets.model.DisplayBudget
 import com.ivy.data.db.dao.write.WriteBudgetDao
+import com.ivy.data.category.CategoryTree
 import com.ivy.data.model.Category
 import com.ivy.data.model.Expense
 import com.ivy.data.model.Income
@@ -231,7 +232,13 @@ class BudgetViewModel @Inject constructor(
     ): Double {
         // TODO: Re-work this by creating an FPAction for it
         val accountsFilter = budget.parseAccountIds()
-        val categoryFilter = budget.parseCategoryIds()
+
+        // A budget on a parent covers its children. This is the same rollup
+        // the pie chart uses, so a category's budget can never disagree with
+        // the chart's slice for it: one rule, one implementation.
+        val categoryFilter = budget.parseCategoryIds().let { ids ->
+            CategoryTree.of(categories.value).rollupIdsOf(ids)
+        }
 
         return transactions
             .filter { accountsFilter.isEmpty() || accountsFilter.contains(it.getAccountId()) }

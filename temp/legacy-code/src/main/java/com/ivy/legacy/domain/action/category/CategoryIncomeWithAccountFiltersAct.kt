@@ -1,5 +1,6 @@
 package com.ivy.wallet.domain.action.category
 
+import com.ivy.data.category.CategoryTree
 import com.ivy.data.model.Category
 import com.ivy.data.model.Transaction
 import com.ivy.data.temp.migration.getAccountId
@@ -17,8 +18,9 @@ class CategoryIncomeWithAccountFiltersAct @Inject constructor(
 
     override suspend fun Input.compose(): suspend () -> IncomeExpenseTransferPair = suspend {
         val accountFilterSet = accountFilterList.map { it.id }.toHashSet()
+        val tree = CategoryTree.of(allCategories)
         transactions.filter {
-            it.category?.value == category?.id?.value
+            tree.matches(it.category?.value, category)
         }.filter {
             if (accountFilterSet.isEmpty()) {
                 true
@@ -38,7 +40,16 @@ class CategoryIncomeWithAccountFiltersAct @Inject constructor(
         val transactions: List<Transaction>,
         val accountFilterList: List<Account>,
         val category: Category?,
-        val baseCurrency: String
+        val baseCurrency: String,
+        /**
+         * Every category, parents and children alike.
+         *
+         * Needed for the rollup: a category's id alone says nothing about
+         * which children it owns. Defaulted to empty so an existing caller
+         * that has no list still behaves exactly as before (it just matches
+         * the category itself).
+         */
+        val allCategories: List<Category> = emptyList(),
     )
 }
 
@@ -49,8 +60,9 @@ class LegacyCategoryIncomeWithAccountFiltersAct @Inject constructor(
 
     override suspend fun Input.compose(): suspend () -> IncomeExpenseTransferPair = suspend {
         val accountFilterSet = accountFilterList.map { it.id }.toHashSet()
+        val tree = CategoryTree.of(allCategories)
         transactions.filter {
-            it.categoryId == category?.id?.value
+            tree.matches(it.categoryId, category)
         }.filter {
             if (accountFilterSet.isEmpty()) {
                 true
@@ -70,6 +82,8 @@ class LegacyCategoryIncomeWithAccountFiltersAct @Inject constructor(
         val transactions: List<com.ivy.base.legacy.Transaction>,
         val accountFilterList: List<Account>,
         val category: Category?,
-        val baseCurrency: String
+        val baseCurrency: String,
+        /** See [CategoryIncomeWithAccountFiltersAct.Input.allCategories]. */
+        val allCategories: List<Category> = emptyList(),
     )
 }

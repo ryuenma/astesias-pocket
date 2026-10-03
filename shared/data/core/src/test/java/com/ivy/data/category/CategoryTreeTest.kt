@@ -1,0 +1,364 @@
+package com.ivy.data.category
+
+import com.ivy.data.model.Category
+import com.ivy.data.model.CategoryId
+import com.ivy.data.model.primitive.ColorInt
+import com.ivy.data.model.primitive.NotBlankTrimmedString
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.shouldBe
+import org.junit.Test
+import java.util.UUID
+
+/**
+ * The category tree is where the "no foreign key on parentId" trade-off is
+ * actually paid. A subcategory is an ordinary row pointing at a parent id,
+ * with nothing in the schema stopping that pointer from dangling (an
+ * orphan, after the parent is deleted) or from looping (a cycle).
+ *
+ * These tests pin the three properties that fall out of that:
+ *   - nothing the user can spend under becomes unselectable,
+ *   - no walk loops forever,
+ *   - a parent's rollup contains its children's money and nobody else's.
+ */
+class CategoryTreeTest {
+
+    private fun category(
+        name: String,
+        parentId: CategoryId? = null,
+        orderNum: Double = 0.0,
+    ) = Category(
+        id = CategoryId(UUID.randomUUID()),
+        name = NotBlankTrimmedString.unsafe(name),
+        color = ColorInt(0),
+        icon = null,
+        orderNum = orderNum,
+        parentId = parentId,
+    )
+
+    private fun names(categories: List<Category>) = categories.map { it.name.value }
+
+    private fun Category.children(tree: CategoryTree) = names(tree.childrenOf(this))
+
+    @Test
+    fun `flat list - every category is a root`() {
+        val a = category("Food")
+        val b = category("Rent")
+
+        val tree = CategoryTree.of(listOf(a, b))
+
+        tree.roots shouldBe listOf(a, b)
+        tree.childrenOf(a) shouldBe emptyList()
+    }
+
+    @Test
+    fun `subcategory is not a root - it nests under its parent`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+
+        val tree = CategoryTree.of(listOf(food, restaurants))
+
+        tree.roots shouldBe listOf(food)
+        food.children(tree) shouldBe listOf("Restaurants")
+    }
+
+    /**
+     * orderNum is GLOBAL - CategoryCreator hands out findMaxOrderNum() + 1 -
+     * so a child created after its parent's sibling sorts *between* two
+     * roots. Flattening the list into roots-then-children must not inherit
+     * that interleaving, or a parent and its child end up on opposite sides
+     * of the list.
+     */
+    @Test
+    fun `global orderNum does not split a parent from its child`() {
+        val food = category("Food", orderNum = 1.0)
+        val rent = category("Rent", orderNum = 2.0)
+        val restaurants = category("Restaurants", parentId = food.id, orderNum = 3.0)
+
+        val tree = CategoryTree.of(listOf(food, rent, restaurants))
+
+        // Rent's orderNum sits between the two, but Rent is still a root and
+        // Restaurants is still Food's child.
+        names(tree.roots) shouldBe listOf("Food", "Rent")
+        food.children(tree) shouldBe listOf("Restaurants")
+    }
+
+    @Test
+    fun `caller order is preserved - the sort the view model applied is not overridden`() {
+        val zeta = category("Zeta")
+        val alpha = category("Alpha")
+        val alphaChild = category("Alpha child", parentId = alpha.id)
+
+        val tree = CategoryTree.of(listOf(zeta, alpha, alphaChild))
+
+        names(tree.roots) shouldBe listOf("Zeta", "Alpha")
+    }
+
+    @Test
+    fun `parent with several children keeps them in caller order`() {
+        val food = category("Food")
+        val coffee = category("Coffee", parentId = food.id)
+        val restaurants = category("Restaurants", parentId = food.id)
+
+        val tree = CategoryTree.of(listOf(food, restaurants, coffee))
+
+        food.children(tree) shouldBe listOf("Restaurants", "Coffee")
+    }
+
+    /**
+     * The delete policy is "no action" on purpose (see CategoryEntity), so a
+     * parent can be deleted while its children survive. Their parentId now
+     * dangles. findRoots() would not return them, so a picker built straight
+     * off that query would make them unselectable while their transactions
+     * keep existing - spending history pointing at nothing reachable.
+     */
+    @Test
+    fun `orphan - parent deleted - is promoted to a root rather than becoming unreachable`() {
+        val orphan = category("Groceries", parentId = CategoryId(UUID.randomUUID()))
+        val rent = category("Rent")
+
+        val tree = CategoryTree.of(listOf(orphan, rent))
+
+        names(tree.roots) shouldContainExactlyInAnyOrder listOf("Groceries", "Rent")
+    }
+
+    @Test
+    fun `self-parenting category does not hang the tree`() {
+        // Constructed by hand on purpose: nothing in the schema prevents it.
+        val id = CategoryId(UUID.randomUUID())
+        val selfish = Category(
+            id = id,
+            name = NotBlankTrimmedString.unsafe("Selfish"),
+            color = ColorInt(0),
+            icon = null,
+            orderNum = 0.0,
+            parentId = id,
+        )
+
+        val tree = CategoryTree.of(listOf(selfish))
+
+        names(tree.roots) shouldBe listOf("Selfish")
+        tree.childrenOf(selfish) shouldBe emptyList()
+    }
+
+    @Test
+    fun `two-node cycle terminates and stays visible`() {
+        val a = category("A")
+        val b = Category(
+            id = CategoryId(UUID.randomUUID()),
+            name = NotBlankTrimmedString.unsafe("B"),
+            color = ColorInt(0),
+            icon = null,
+            orderNum = 0.0,
+            parentId = a.id,
+        )
+        val aCyclic = a.copy(parentId = b.id)
+
+        val tree = CategoryTree.of(listOf(aCyclic, b))
+
+        // Neither loops forever nor vanishes. A<->B has no true root, so the
+        // first category in caller order becomes one and the other nests
+        // under it - reachable exactly once, which is what "not hidden"
+        // has to mean.
+        names(tree.roots) shouldBe listOf("A")
+        aCyclic.children(tree) shouldBe listOf("B")
+        b.children(tree) shouldBe emptyList()
+
+        val rendered = tree.roots + tree.roots.flatMap(tree::childrenOf)
+        rendered.map { it.id }.toSet().size shouldBe 2
+    }
+
+    @Test
+    fun `three-level chain - the tail is promoted, not hidden`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val pizza = category("Pizza", parentId = restaurants.id)
+
+        val tree = CategoryTree.of(listOf(food, restaurants, pizza))
+
+        // Food -> Restaurants is a legitimate level-1 pair and stays nested.
+        // Pizza would be a THIRD level, which the picker does not render, so
+        // it is promoted to the top rather than left unreachable: a category
+        // nobody can select is worse than one shown at the wrong depth.
+        names(tree.roots) shouldBe listOf("Food", "Pizza")
+        food.children(tree) shouldBe listOf("Restaurants")
+        restaurants.children(tree) shouldBe emptyList()
+
+        // Rollup is not capped at the displayed depth: Pizza's money still
+        // counts for its real parent even though the UI cannot nest that
+        // deep.
+        tree.rollupIds(food) shouldContainExactlyInAnyOrder listOf(
+            food.id.value,
+            restaurants.id.value,
+            pizza.id.value,
+        )
+    }
+
+    @Test
+    fun `every category appears exactly once across the whole tree`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val rent = category("Rent")
+        val orphan = category("Orphan", parentId = CategoryId(UUID.randomUUID()))
+
+        val tree = CategoryTree.of(listOf(food, restaurants, rent, orphan))
+
+        val rendered = tree.roots + tree.roots.flatMap(tree::childrenOf)
+
+        rendered.map { it.id }.toSet().size shouldBe 4
+    }
+
+    // ---- Rollup: the money side ----
+
+    @Test
+    fun `parent rollup includes its own id and its children's`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val rent = category("Rent")
+
+        val tree = CategoryTree.of(listOf(food, restaurants, rent))
+
+        tree.rollupIds(food) shouldContainExactlyInAnyOrder listOf(
+            food.id.value,
+            restaurants.id.value,
+        )
+    }
+
+    @Test
+    fun `child rollup is just itself - a child's money is not double counted upward`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+
+        val tree = CategoryTree.of(listOf(food, restaurants))
+
+        tree.rollupIds(restaurants) shouldBe setOf(restaurants.id.value)
+    }
+
+    @Test
+    fun `rollup does not leak into siblings`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val groceries = category("Groceries", parentId = food.id)
+        val rent = category("Rent")
+
+        val tree = CategoryTree.of(listOf(food, restaurants, groceries, rent))
+
+        tree.rollupIds(restaurants).contains(rent.id.value) shouldBe false
+        tree.rollupIds(restaurants).contains(groceries.id.value) shouldBe false
+    }
+
+    /**
+     * The pie chart's "account transfers" bucket is a Category built in
+     * memory that never touched the database. It is not in the tree, and it
+     * must still match itself - a lookup miss must not silently zero it.
+     */
+    @Test
+    fun `category outside the tree rolls up to itself`() {
+        val tree = CategoryTree.of(listOf(category("Food")))
+        val synthetic = category("Account transfers")
+
+        tree.rollupIds(synthetic) shouldBe setOf(synthetic.id.value)
+        tree.matches(synthetic.id.value, synthetic) shouldBe true
+    }
+
+    @Test
+    fun `cycle rollup terminates and is bounded by the categories present`() {
+        val a = category("A")
+        val b = Category(
+            id = CategoryId(UUID.randomUUID()),
+            name = NotBlankTrimmedString.unsafe("B"),
+            color = ColorInt(0),
+            icon = null,
+            orderNum = 0.0,
+            parentId = a.id,
+        )
+        val aCyclic = a.copy(parentId = b.id)
+
+        val tree = CategoryTree.of(listOf(aCyclic, b))
+
+        tree.rollupIds(aCyclic) shouldContainExactlyInAnyOrder listOf(
+            aCyclic.id.value,
+            b.id.value,
+        )
+    }
+
+    @Test
+    fun `matches - a parent matches a child's transaction`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val tree = CategoryTree.of(listOf(food, restaurants))
+
+        tree.matches(restaurants.id.value, food) shouldBe true
+        tree.matches(food.id.value, food) shouldBe true
+    }
+
+    @Test
+    fun `matches - a child does not match its parent's transaction`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val tree = CategoryTree.of(listOf(food, restaurants))
+
+        tree.matches(food.id.value, restaurants) shouldBe false
+    }
+
+    /**
+     * "Unspecified category" means transactions with NO category. It must not
+     * roll up, or the unspecified bucket would absorb every subcategory's
+     * money and the pie chart slices would no longer sum to the total.
+     */
+    @Test
+    fun `matches - unspecified category matches only uncategorised transactions`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val tree = CategoryTree.of(listOf(food, restaurants))
+
+        tree.matches(null, null) shouldBe true
+        tree.matches(food.id.value, null) shouldBe false
+        tree.matches(restaurants.id.value, null) shouldBe false
+    }
+
+    // ---- Budget filter ----
+
+    @Test
+    fun `budget on a parent covers its children`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val rent = category("Rent")
+        val tree = CategoryTree.of(listOf(food, restaurants, rent))
+
+        tree.rollupIdsOf(listOf(food.id.value)) shouldContainExactlyInAnyOrder listOf(
+            food.id.value,
+            restaurants.id.value,
+        )
+    }
+
+    @Test
+    fun `budget filter is empty - no rollup, so an empty filter stays empty`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val tree = CategoryTree.of(listOf(food, restaurants))
+
+        tree.rollupIdsOf(emptyList()) shouldBe emptySet()
+    }
+
+    /**
+     * A budget can reference a category that was deleted. Its id must pass
+     * through untouched rather than vanishing, so behaviour for a stale
+     * budget is unchanged from before subcategories existed.
+     */
+    @Test
+    fun `budget referencing a deleted category keeps its id`() {
+        val food = category("Food")
+        val deletedId = UUID.randomUUID()
+        val tree = CategoryTree.of(listOf(food))
+
+        tree.rollupIdsOf(listOf(deletedId)) shouldBe setOf(deletedId)
+    }
+
+    @Test
+    fun `empty tree - rollup of an empty selection`() {
+        val tree = CategoryTree.of(emptyList())
+
+        tree.roots shouldBe emptyList()
+        tree.rollupIdsOf(emptyList()) shouldBe emptySet()
+    }
+}
