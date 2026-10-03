@@ -513,4 +513,5 @@
     <string name="sync_err_unreachable">Could not reach the server. Check the address and your connection.</string>
     <string name="sync_err_server">The server replied with something unexpected. Try again shortly.</string>
     <string name="export_xlsx">Export as spreadsheet (.xlsx)</string>
+    <string name="total_savings">Total savings (excluded from balance)</string>
 </resources>

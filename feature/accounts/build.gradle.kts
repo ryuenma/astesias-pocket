@@ -1,4 +1,5 @@
 plugins {
+    id("ivy.integration.testing")
     id("ivy.feature")
 }
 

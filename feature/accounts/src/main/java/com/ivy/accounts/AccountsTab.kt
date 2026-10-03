@@ -41,6 +41,7 @@ import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
 import com.ivy.legacy.IvyWalletPreview
 import com.ivy.legacy.data.model.AccountData
+import com.ivy.legacy.utils.format
 import com.ivy.legacy.utils.clickableNoIndication
 import com.ivy.legacy.utils.horizontalSwipeListener
 import com.ivy.legacy.utils.rememberInteractionSource
@@ -145,6 +146,19 @@ private fun BoxWithConstraintsScope.UI(
                         expensesLabel = stringResource(id = R.string.total_balance_excluded),
                         expenses = state.totalBalanceWithExcluded.toDoubleOrNull() ?: 0.00
                     )
+
+                    // Shown only when something is actually parked outside the
+                    // balance, so a wallet with no savings account is not given a
+                    // "Total savings 0.00" row that implies a broken reading.
+                    val savings = state.totalSavings.toDoubleOrNull() ?: 0.0
+                    if (savings > 0.0) {
+                        Spacer(Modifier.height(16.dp))
+
+                        TotalSavingsCard(
+                            amount = savings,
+                            currency = state.baseCurrency
+                        )
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -416,7 +430,9 @@ private fun PreviewAccountsTabCompactModeDisabled(theme: Theme = Theme.LIGHT) {
             totalBalanceWithoutExcludedText = "BGN 25.54",
             reorderVisible = false,
             compactAccountsModeEnabled = false,
-            hideTotalBalance = false
+            hideTotalBalance = false,
+            totalSavings = "1250000.00",
+            totalSavingsText = "IDR Total savings (excluded from balance) 1,250,000.00"
         )
         UI(state = state)
     }
@@ -503,7 +519,9 @@ private fun PreviewAccountsTabCompactModeEnabled(theme: Theme = Theme.LIGHT) {
             totalBalanceWithoutExcludedText = "BGN 25.54",
             reorderVisible = false,
             compactAccountsModeEnabled = true,
-            hideTotalBalance = false
+            hideTotalBalance = false,
+            totalSavings = "1250000.00",
+            totalSavingsText = "IDR Total savings (excluded from balance) 1,250,000.00"
         )
         UI(state = state)
     }
@@ -527,4 +545,37 @@ fun AccountsTabCompactUITest(dark: Boolean) {
         false -> Theme.LIGHT
     }
     PreviewAccountsTabCompactModeEnabled(theme)
+}
+
+/**
+ * The owner's money parked outside the main balance.
+ *
+ * Distinct from the excluded-accounts row above, whose label reads as "the same
+ * money counted differently". This one says what the figure is FOR.
+ */
+@Composable
+private fun TotalSavingsCard(amount: Double, currency: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(UI.shapes.r4)
+            .background(UI.colors.medium, UI.shapes.r4)
+            .padding(16.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.total_savings),
+            style = UI.typo.b2.style(
+                color = UI.colors.gray,
+                fontWeight = FontWeight.Bold
+            )
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = amount.format(currency),
+            style = UI.typo.h2.style(color = UI.colors.pureInverse)
+        )
+    }
 }

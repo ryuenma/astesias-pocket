@@ -15,4 +15,11 @@ data class AccountsState(
     val reorderVisible: Boolean,
     val compactAccountsModeEnabled: Boolean,
     val hideTotalBalance: Boolean,
+
+    /**
+     * Balance held in accounts excluded from the main total - the owner's
+     * savings, deposits and anything else parked out of the way.
+     */
+    val totalSavings: String,
+    val totalSavingsText: String,
 )

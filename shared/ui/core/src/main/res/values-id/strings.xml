@@ -469,4 +469,5 @@
     <string name="sync_err_unreachable">Tidak dapat menghubungi server. Periksa alamat dan koneksi Anda.</string>
     <string name="sync_err_server">Server menjawab dengan hal yang tidak terduga. Coba lagi sebentar lagi.</string>
     <string name="export_xlsx">Ekspor sebagai spreadsheet (.xlsx)</string>
+    <string name="total_savings">Total tabungan (tidak dihitung di saldo)</string>
 </resources>

@@ -58,6 +58,8 @@ class AccountsViewModel @Inject constructor(
     private var totalBalanceWithExcludedText by mutableStateOf("")
     private var totalBalanceWithoutExcluded by mutableStateOf("")
     private var totalBalanceWithoutExcludedText by mutableStateOf("")
+    private var totalSavings by mutableStateOf("")
+    private var totalSavingsText by mutableStateOf("")
     private var reorderVisible by mutableStateOf(false)
 
     init {
@@ -91,7 +93,9 @@ class AccountsViewModel @Inject constructor(
             totalBalanceWithoutExcludedText = getTotalBalanceWithoutExcludedText(),
             reorderVisible = getReorderVisible(),
             compactAccountsModeEnabled = getCompactAccountsMode(),
-            hideTotalBalance = getHideTotalBalance()
+            hideTotalBalance = getHideTotalBalance(),
+            totalSavings = getTotalSavings(),
+            totalSavingsText = getTotalSavingsText()
         )
     }
 
@@ -99,6 +103,12 @@ class AccountsViewModel @Inject constructor(
     private fun getHideTotalBalance(): Boolean {
         return features.hideTotalBalance.asEnabledState()
     }
+
+    @Composable
+    private fun getTotalSavings(): String = totalSavings
+
+    @Composable
+    private fun getTotalSavingsText(): String = totalSavingsText
 
     @Composable
     private fun getBaseCurrency(): String {
@@ -199,8 +209,20 @@ class AccountsViewModel @Inject constructor(
             )
         ).toDouble()
 
+        // Savings is the excluded accounts' balance, which is exactly the
+        // difference between the two totals computed above: one includes every
+        // account, the other only includeInBalance ones. No second query, and
+        // no chance of the two figures disagreeing later.
+        val savings = totalBalanceWithExcludedAccounts - totalBalanceWithoutExcludedAccounts
+
         baseCurrency = baseCurrencyCode
         accountsData = accountsDataList
+        totalSavings = savings.toString()
+        totalSavingsText = context.getString(
+            R.string.total_savings,
+            baseCurrencyCode,
+            savings.format(baseCurrencyCode)
+        )
         totalBalanceWithExcluded = totalBalanceWithExcludedAccounts.toString()
         totalBalanceWithExcludedText = context.getString(
             R.string.total,
