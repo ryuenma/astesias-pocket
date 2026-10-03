@@ -2,7 +2,9 @@ package com.ivy.wallet.ui.theme.modal.edit
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -28,6 +30,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
+import com.ivy.data.model.AccountType
 import com.ivy.domain.legacy.ui.IvyColorPicker
 import com.ivy.legacy.IvyWalletPreview
 import com.ivy.legacy.datamodel.Account
@@ -41,6 +44,8 @@ import com.ivy.wallet.domain.data.IvyCurrency
 import com.ivy.wallet.domain.deprecated.logic.model.CreateAccountData
 import com.ivy.wallet.ui.theme.Gray
 import com.ivy.wallet.ui.theme.Ivy
+import com.ivy.wallet.ui.theme.dynamicContrast
+import com.ivy.wallet.ui.theme.components.ItemIconSDefaultIcon
 import com.ivy.wallet.ui.theme.components.IvyCheckboxWithText
 import com.ivy.wallet.ui.theme.modal.ChooseIconModal
 import com.ivy.wallet.ui.theme.modal.CurrencyModal
@@ -87,6 +92,12 @@ fun BoxWithConstraintsScope.AccountModal(
     }
     var includeInBalance by remember(modal) {
         mutableStateOf(account?.includeInBalance ?: true)
+    }
+    // null means "custom": the owner picked an icon themselves, so the type row
+    // shows nothing selected and the includeInBalance checkbox stands on its
+    // own, as it did before types existed.
+    var accountType by remember(modal) {
+        mutableStateOf(typeOf(account?.icon))
     }
 
     var amountModalVisible by remember { mutableStateOf(false) }
@@ -160,10 +171,21 @@ fun BoxWithConstraintsScope.AccountModal(
 
         Spacer(Modifier.height(24.dp))
 
-        IvyColorPicker(
-            selectedColor = color,
-            onColorSelected = { color = it }
-        )
+                AccountTypeRow(
+                    selected = accountType,
+                    onSelect = { type ->
+                        accountType = type
+                        icon = type.icon.id
+                        includeInBalance = type.includeInBalance
+                    }
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                IvyColorPicker(
+                    selectedColor = color,
+                    onColorSelected = { color = it }
+                )
 
         Spacer(modifier = Modifier.height(40.dp))
 
@@ -252,6 +274,11 @@ fun BoxWithConstraintsScope.AccountModal(
         dismiss = { chooseIconModalVisible = false }
     ) {
         icon = it
+        // A hand-picked icon is the owner overriding the type, so the row
+        // stops claiming to know what kind of account this is. The
+        // includeInBalance checkbox is left alone - re-deciding it here would
+        // silently move money between Total Balance and savings.
+        accountType = typeOf(it)
     }
 }
 
@@ -293,6 +320,103 @@ private fun save(
     }
 
     dismiss()
+}
+
+/**
+ * The account type an already-saved icon means, or null for a custom icon.
+ *
+ * Delegates to the model rather than repeating the lookup, so the modal and
+ * the type can never disagree about which icons are typed.
+ */
+private fun typeOf(iconName: String?): AccountType? = iconName?.let {
+    AccountType.entries.firstOrNull { type -> type.icon.id == it }
+}
+
+/**
+ * Picks what kind of account this is, which is what decides whether its money
+ * is inside Total Balance.
+ *
+ * Deliberately a row of types rather than another free-form control: choosing
+ * "Savings" is the point of the feature, and it has to set includeInBalance
+ * for the owner or the choice would not mean anything.
+ */
+@Composable
+private fun AccountTypeRow(
+    selected: AccountType?,
+    onSelect: (AccountType) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 32.dp)) {
+        Text(
+            text = stringResource(R.string.account_type),
+            style = UI.typo.b2.style(
+                color = UI.colors.gray,
+                fontWeight = FontWeight.SemiBold
+            )
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AccountType.entries.forEach { type ->
+                AccountTypeChip(
+                    type = type,
+                    selected = type == selected,
+                    onClick = { onSelect(type) }
+                )
+            }
+        }
+
+        if (selected == AccountType.Savings) {
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = stringResource(R.string.savings_account_hint),
+                style = UI.typo.c.style(color = UI.colors.gray)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccountTypeChip(
+    type: AccountType,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val label = when (type) {
+        AccountType.Cash -> stringResource(R.string.account_type_cash)
+        AccountType.Bank -> stringResource(R.string.account_type_bank)
+        AccountType.Savings -> stringResource(R.string.account_type_savings)
+    }
+
+    Row(
+        modifier = Modifier
+            .clip(UI.shapes.r4)
+            .background(
+                if (selected) Ivy else UI.colors.medium,
+                UI.shapes.r4
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag("account_type_${type.name.lowercase()}"),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ItemIconSDefaultIcon(
+            iconName = type.icon.id,
+            defaultIcon = R.drawable.ic_custom_account_s,
+            tint = if (selected) Ivy.dynamicContrast() else UI.colors.pureInverse
+        )
+
+        Spacer(Modifier.width(8.dp))
+
+        Text(
+            text = label,
+            style = UI.typo.b2.style(
+                color = if (selected) Ivy.dynamicContrast() else UI.colors.pureInverse,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            )
+        )
+    }
 }
 
 @Composable

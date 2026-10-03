@@ -517,4 +517,9 @@
     <string name="sync_err_server">The server replied with something unexpected. Try again shortly.</string>
     <string name="export_xlsx">Export as spreadsheet (.xlsx)</string>
     <string name="total_savings">Total savings (excluded from balance)</string>
+    <string name="account_type">Account type</string>
+    <string name="account_type_cash">Cash</string>
+    <string name="account_type_bank">Bank</string>
+    <string name="account_type_savings">Savings</string>
+    <string name="savings_account_hint">Savings accounts are kept out of your Total Balance and counted as savings.</string>
 </resources>

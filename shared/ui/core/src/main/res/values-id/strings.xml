@@ -470,4 +470,9 @@
     <string name="sync_err_server">Server menjawab dengan hal yang tidak terduga. Coba lagi sebentar lagi.</string>
     <string name="export_xlsx">Ekspor sebagai spreadsheet (.xlsx)</string>
     <string name="total_savings">Total tabungan (tidak dihitung di saldo)</string>
+    <string name="account_type">Jenis akun</string>
+    <string name="account_type_cash">Tunai</string>
+    <string name="account_type_bank">Bank</string>
+    <string name="account_type_savings">Rekening Deposito</string>
+    <string name="savings_account_hint">Rekening deposito tidak dihitung di Total Saldo dan dihitung sebagai tabungan.</string>
 </resources>
