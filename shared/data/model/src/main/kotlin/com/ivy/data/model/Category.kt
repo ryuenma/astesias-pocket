@@ -16,4 +16,12 @@ data class Category(
     val color: ColorInt,
     val icon: IconAsset?,
     override val orderNum: Double,
+    /**
+     * The owning category, or null when this is a top-level category.
+     *
+     * A subcategory is an ordinary [Category] rather than a distinct type, so
+     * every existing consumer keeps working unchanged: the only difference is
+     * that a subcategory's id appears in exactly one parent's `parentId` list.
+     */
+    val parentId: CategoryId? = null,
 ) : Identifiable<CategoryId>, Reorderable

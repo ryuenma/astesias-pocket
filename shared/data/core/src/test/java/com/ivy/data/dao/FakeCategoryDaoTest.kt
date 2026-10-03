@@ -341,6 +341,236 @@ class FakeCategoryDaoTest {
     }
 
     @Test
+    fun `find roots - only categories without a parent`() = runTest {
+        // given
+        val rootId = UUID.randomUUID()
+        val subId = UUID.randomUUID()
+        val categories = listOf(
+            CategoryEntity(
+                name = "Food",
+                color = 42,
+                icon = null,
+                orderNum = 1.0,
+                parentId = null,
+                isDeleted = false,
+                id = rootId
+            ),
+            CategoryEntity(
+                name = "Restaurants",
+                color = 42,
+                icon = null,
+                orderNum = 2.0,
+                parentId = rootId,
+                isDeleted = false,
+                id = subId
+            )
+        )
+
+        // when
+        dao.saveMany(categories)
+        val res = dao.findRoots(false)
+
+        // then
+        res.map { it.id } shouldBe listOf(rootId)
+    }
+
+    @Test
+    fun `find roots - ordered by order num`() = runTest {
+        // given
+        val first = UUID.randomUUID()
+        val second = UUID.randomUUID()
+        dao.saveMany(
+            listOf(
+                CategoryEntity(
+                    name = "Second",
+                    color = 42,
+                    icon = null,
+                    orderNum = 2.0,
+                    parentId = null,
+                    isDeleted = false,
+                    id = second
+                ),
+                CategoryEntity(
+                    name = "First",
+                    color = 42,
+                    icon = null,
+                    orderNum = 1.0,
+                    parentId = null,
+                    isDeleted = false,
+                    id = first
+                )
+            )
+        )
+
+        // when
+        val res = dao.findRoots(false)
+
+        // then
+        res.map { it.id } shouldBe listOf(first, second)
+    }
+
+    @Test
+    fun `find subcategories - direct children only, ordered`() = runTest {
+        // given
+        val rootId = UUID.randomUUID()
+        val childA = UUID.randomUUID()
+        val childB = UUID.randomUUID()
+        val grandChild = UUID.randomUUID()
+        val otherRoot = UUID.randomUUID()
+        dao.saveMany(
+            listOf(
+                CategoryEntity(
+                    name = "Food",
+                    color = 42,
+                    icon = null,
+                    orderNum = 1.0,
+                    parentId = null,
+                    isDeleted = false,
+                    id = rootId
+                ),
+                CategoryEntity(
+                    name = "Restaurants",
+                    color = 42,
+                    icon = null,
+                    orderNum = 3.0,
+                    parentId = rootId,
+                    isDeleted = false,
+                    id = childB
+                ),
+                CategoryEntity(
+                    name = "Groceries",
+                    color = 42,
+                    icon = null,
+                    orderNum = 2.0,
+                    parentId = rootId,
+                    isDeleted = false,
+                    id = childA
+                ),
+                CategoryEntity(
+                    name = "Pizza",
+                    color = 42,
+                    icon = null,
+                    orderNum = 4.0,
+                    parentId = childA,
+                    isDeleted = false,
+                    id = grandChild
+                ),
+                CategoryEntity(
+                    name = "Rent",
+                    color = 42,
+                    icon = null,
+                    orderNum = 5.0,
+                    parentId = null,
+                    isDeleted = false,
+                    id = otherRoot
+                )
+            )
+        )
+
+        // when
+        val res = dao.findSubcategories(rootId, false)
+
+        // then
+        res.map { it.id } shouldBe listOf(childA, childB)
+    }
+
+    @Test
+    fun `find subcategories - deleted children are excluded`() = runTest {
+        // given
+        val rootId = UUID.randomUUID()
+        val kept = UUID.randomUUID()
+        val deleted = UUID.randomUUID()
+        dao.saveMany(
+            listOf(
+                CategoryEntity(
+                    name = "Food",
+                    color = 42,
+                    icon = null,
+                    orderNum = 1.0,
+                    parentId = null,
+                    isDeleted = false,
+                    id = rootId
+                ),
+                CategoryEntity(
+                    name = "Groceries",
+                    color = 42,
+                    icon = null,
+                    orderNum = 2.0,
+                    parentId = rootId,
+                    isDeleted = false,
+                    id = kept
+                ),
+                CategoryEntity(
+                    name = "Old",
+                    color = 42,
+                    icon = null,
+                    orderNum = 3.0,
+                    parentId = rootId,
+                    isDeleted = true,
+                    id = deleted
+                )
+            )
+        )
+
+        // when
+        val notDeleted = dao.findSubcategories(rootId, false)
+        val deletedChildren = dao.findSubcategories(rootId, true)
+
+        // then
+        notDeleted.map { it.id } shouldBe listOf(kept)
+        deletedChildren.map { it.id } shouldBe listOf(deleted)
+    }
+
+    @Test
+    fun `find subcategories - leaf has none`() = runTest {
+        // given
+        val leafId = UUID.randomUUID()
+        dao.save(
+            CategoryEntity(
+                name = "Groceries",
+                color = 42,
+                icon = null,
+                orderNum = 1.0,
+                parentId = null,
+                isDeleted = false,
+                id = leafId
+            )
+        )
+
+        // when
+        val res = dao.findSubcategories(leafId, false)
+
+        // then
+        res shouldBe emptyList()
+    }
+
+    @Test
+    fun `save - reparenting a category updates it in place`() = runTest {
+        // given
+        val id = UUID.randomUUID()
+        val from = UUID.randomUUID()
+        val to = UUID.randomUUID()
+        val category = CategoryEntity(
+            name = "Groceries",
+            color = 42,
+            icon = null,
+            orderNum = 1.0,
+            parentId = from,
+            isDeleted = false,
+            id = id
+        )
+        dao.save(category)
+
+        // when
+        dao.save(category.copy(parentId = to))
+        val res = dao.findById(id)
+
+        // then
+        res?.parentId shouldBe to
+        res shouldBe category.copy(parentId = to)
+    }
+
+    @Test
     fun `delete all`() = runTest {
         // given
         val id1 = UUID.randomUUID()

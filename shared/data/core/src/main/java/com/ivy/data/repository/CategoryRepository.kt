@@ -42,6 +42,32 @@ class CategoryRepository @Inject constructor(
         }
     )
 
+    /**
+     * Top-level categories, i.e. the roots of the tree.
+     *
+     * Not memoized on purpose: the memo is a whole-list cache, and filtering it
+     * would mean loading every subcategory just to pick the roots. This is the
+     * first call a category tree makes, so it runs against the indexed column.
+     */
+    suspend fun findRoots(): List<Category> = withContext(dispatchersProvider.io) {
+        categoryDao.findRoots().mapNotNull {
+            with(mapper) { it.toDomain() }.getOrNull()
+        }
+    }
+
+    /**
+     * Direct children of [id], ordered for display.
+     *
+     * [Category.parentId] carries no foreign key, so this is also how a caller
+     * finds out whether deleting or re-parenting [id] would strand a subtree.
+     */
+    suspend fun findSubcategories(id: CategoryId): List<Category> =
+        withContext(dispatchersProvider.io) {
+            categoryDao.findSubcategories(id.value).mapNotNull {
+                with(mapper) { it.toDomain() }.getOrNull()
+            }
+        }
+
     suspend fun findMaxOrderNum(): Double = if (memo.findAllMemoized) {
         memo.items.maxOfOrNull { (_, acc) -> acc.orderNum } ?: 0.0
     } else {

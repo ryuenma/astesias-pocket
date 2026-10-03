@@ -18,6 +18,18 @@ class FakeCategoryDao : CategoryDao, WriteCategoryDao {
         return items.find { it.id == id }
     }
 
+    override suspend fun findRoots(deleted: Boolean): List<CategoryEntity> {
+        return items
+            .filter { it.isDeleted == deleted && it.parentId == null }
+            .sortedBy { it.orderNum }
+    }
+
+    override suspend fun findSubcategories(parentId: UUID, deleted: Boolean): List<CategoryEntity> {
+        return items
+            .filter { it.isDeleted == deleted && it.parentId == parentId }
+            .sortedBy { it.orderNum }
+    }
+
     override suspend fun findMaxOrderNum(): Double? {
         return items.maxOfOrNull { it.orderNum }
     }

@@ -21,6 +21,10 @@ fun Arb.Companion.category(
         color = Arb.colorInt().bind(),
         icon = Arb.maybe(Arb.iconAsset()).bind(),
         orderNum = Arb.double().removeEdgecases().bind(),
+        // An arbitrary parent: these generators feed flat-list properties, not tree
+        // invariants, so a genuine tree is something a test should build explicitly
+        // rather than expect from here.
+        parentId = Arb.maybe(Arb.categoryId()).bind(),
     )
 }
 
