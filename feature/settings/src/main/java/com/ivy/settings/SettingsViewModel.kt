@@ -1,6 +1,7 @@
 package com.ivy.settings
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -34,13 +35,17 @@ import com.ivy.legacy.utils.ioThread
 import com.ivy.legacy.utils.timeNowUTC
 import com.ivy.legacy.utils.uiThread
 import com.ivy.ui.ComposeViewModel
+import com.ivy.wallet.android.notification.NotificationPermissionGate
+import com.ivy.wallet.android.notification.NotificationPermissionState
 import com.ivy.wallet.domain.action.global.StartDayOfMonthAct
 import com.ivy.wallet.domain.action.global.UpdateStartDayOfMonthAct
 import com.ivy.wallet.domain.action.settings.SettingsAct
+import com.ivy.wallet.domain.deprecated.logic.notification.TransactionReminderLogic
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @Stable
@@ -61,6 +66,8 @@ class SettingsViewModel @Inject constructor(
     private val settingsWriter: WriteSettingsDao,
     private val exportCsvUseCase: ExportCsvUseCase,
     private val exportXlsxUseCase: ExportXlsxUseCase,
+    private val permissionGate: NotificationPermissionGate,
+    private val transactionReminderLogic: TransactionReminderLogic,
     @ApplicationContext private val context: Context
 ) : ComposeViewModel<SettingsState, SettingsEvent>() {
 
@@ -74,6 +81,10 @@ class SettingsViewModel @Inject constructor(
     private val treatTransfersAsIncomeExpense = mutableStateOf(false)
     private val startDateOfMonth = mutableIntStateOf(1)
     private val progressState = mutableStateOf(false)
+
+    private val notificationsBlocked = mutableStateOf(false)
+    private val requestingNotificationPermission = mutableStateOf(false)
+    private val notificationsPermanentlyDenied = mutableStateOf(false)
 
     @Composable
     override fun uiState(): SettingsState {
@@ -94,7 +105,10 @@ class SettingsViewModel @Inject constructor(
             hideIncome = getHideIncome(),
             languageOptionVisible = isLanguageOptionVisible(),
             syncBaseUrl = syncConfig.baseUrl.orEmpty(),
-            syncProfile = syncConfig.profileId
+            syncProfile = syncConfig.profileId,
+            notificationsBlocked = getNotificationsBlocked(),
+            requestingNotificationPermission = getRequestingNotificationPermission(),
+            notificationsPermanentlyDenied = getNotificationsPermanentlyDenied(),
         )
     }
 
@@ -138,6 +152,64 @@ class SettingsViewModel @Inject constructor(
         showNotifications.value = sharedPrefs.getBoolean(
             SharedPrefs.SHOW_NOTIFICATIONS, true
         )
+        // Conservative default until the screen supplies the real rationale bit:
+        // a wrongly-reported "permanently denied" only adds a settings shortcut,
+        // whereas a wrongly-reported "askable" would show a button that cannot work.
+        applyPermissionState(shouldShowRationale = true)
+    }
+
+    /**
+     * Re-derives the permission flags from the live grant.
+     *
+     * Called by the screen with the current rationale bit on entry and on every
+     * resume, because [Activity.shouldShowRequestPermissionRationale] needs an
+     * Activity - which this ViewModel has no business holding - and because the
+     * user can flip the permission in system settings while the app sits in the
+     * background. Auto-reset can revoke it too, for users who rarely open the
+     * app, which is exactly why nothing here is cached for the session.
+     */
+    fun refreshNotificationPermission(shouldShowRationale: Boolean) {
+        applyPermissionState(shouldShowRationale)
+    }
+
+    /**
+     * Whether the OS will show a permission dialog for notifications at all.
+     *
+     * Below API 33 there is no runtime permission, so the toggle simply works and
+     * this stays false without asking for anything.
+     */
+    fun requiresNotificationPermissionRequest(): Boolean =
+        permissionGate.requiresRuntimeRequest()
+
+    /**
+     * Folds the OS grant into the three flags the row renders from.
+     *
+     * Deliberately does not touch [showNotifications]: the user asked for
+     * notifications and the switch should keep saying so. What changes is
+     * whether the row admits that nothing is arriving and what it offers next.
+     */
+    private fun applyPermissionState(shouldShowRationale: Boolean) {
+        when (permissionGate.state(shouldShowRationale)) {
+            NotificationPermissionState.NotRequired,
+            NotificationPermissionState.Granted -> {
+                notificationsBlocked.value = false
+                notificationsPermanentlyDenied.value = false
+                // No longer blocked, so the flag the worker writes can be cleared:
+                // leaving it set would show a stale "reminders are off" warning
+                // after the user fixed it in system settings.
+                sharedPrefs.putBoolean(SharedPrefs.NOTIFICATIONS_BLOCKED, false)
+            }
+
+            NotificationPermissionState.DeniedButAskable -> {
+                notificationsBlocked.value = showNotifications.value
+                notificationsPermanentlyDenied.value = false
+            }
+
+            NotificationPermissionState.PermanentlyDenied -> {
+                notificationsBlocked.value = showNotifications.value
+                notificationsPermanentlyDenied.value = true
+            }
+        }
     }
 
     private fun initializeHideCurrentBalance() {
@@ -209,6 +281,17 @@ class SettingsViewModel @Inject constructor(
         return progressState.value
     }
 
+    @Composable
+    private fun getNotificationsBlocked(): Boolean = notificationsBlocked.value
+
+    @Composable
+    private fun getRequestingNotificationPermission(): Boolean =
+        requestingNotificationPermission.value
+
+    @Composable
+    private fun getNotificationsPermanentlyDenied(): Boolean =
+        notificationsPermanentlyDenied.value
+
     private fun isLanguageOptionVisible(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     }
@@ -243,6 +326,8 @@ class SettingsViewModel @Inject constructor(
             SettingsEvent.SwitchTheme -> switchTheme()
             is SettingsEvent.SetLockApp -> setLockApp(event.lockApp)
             is SettingsEvent.SetShowNotifications -> setShowNotifications(event.showNotifications)
+            is SettingsEvent.NotificationPermissionResult ->
+                onNotificationPermissionResult(event.granted)
             is SettingsEvent.SetHideCurrentBalance -> setHideCurrentBalance(
                 event.hideCurrentBalance
             )
@@ -374,12 +459,140 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The notifications toggle.
+     *
+     * Turning it ON now asks for POST_NOTIFICATIONS, and only here. This is the
+     * one moment where the request costs nothing and means something: the user
+     * has just told us they want reminders, so the system dialog is answering a
+     * question they asked rather than interrupting something they were doing.
+     * An automatic prompt anywhere else - on launch, after onboarding, on the
+     * first transaction - is denied by reflex and is not retried.
+     *
+     * Turning it OFF also cancels the scheduled work, which the pref alone never
+     * did: the 24-hour worker kept being enqueued and kept waking the device up
+     * to read a pref that said "stay quiet".
+     */
     private fun setShowNotifications(notificationsShow: Boolean) {
-        showNotifications.value = notificationsShow
+        if (!notificationsShow) {
+            showNotifications.value = false
+            notificationsBlocked.value = false
+            requestingNotificationPermission.value = false
+
+            viewModelScope.launch {
+                sharedPrefs.putBoolean(SharedPrefs.SHOW_NOTIFICATIONS, false)
+                // Deferred to IO: WorkManager.cancelUniqueWork touches its database.
+                ioThread {
+                    transactionReminderLogic.cancelReminder()
+                }
+            }
+            return
+        }
 
         viewModelScope.launch {
-            sharedPrefs.putBoolean(SharedPrefs.SHOW_NOTIFICATIONS, notificationsShow)
+            sharedPrefs.putBoolean(SharedPrefs.SHOW_NOTIFICATIONS, true)
+            scheduleReminderIfAllowed()
+
+            // Below API 33 the permission does not exist, so nothing is asked for
+            // and the switch is simply true. Guarded here rather than in the
+            // composable so the rule lives in one place.
+            if (permissionGate.requiresRuntimeRequest() &&
+                !permissionGate.canPostNotifications()
+            ) {
+                // Flag set before the launch, not after the answer: if the process
+                // dies while the dialog is up, a flag written afterwards would
+                // leave the row believing no request had ever been made.
+                permissionGate.markAsked()
+                requestingNotificationPermission.value = true
+                notificationsBlocked.value = true
+            } else {
+                // Already granted (or not needed): nothing to ask, so the switch is
+                // telling the truth as it stands.
+                notificationsBlocked.value = false
+                requestingNotificationPermission.value = false
+            }
         }
+    }
+
+    /**
+     * Re-arms the daily reminder, but only once reminders can actually arrive.
+     *
+     * Enqueueing work that is guaranteed to be suppressed buys nothing and costs a
+     * daily wakeup, so on API 33+ with no permission the schedule is left empty
+     * and the row explains why. Once the user grants the permission,
+     * [onNotificationPermissionResult] calls this to fill the gap.
+     */
+    private suspend fun scheduleReminderIfAllowed() {
+        if (!permissionGate.canPostNotifications()) {
+            Timber.i("Not scheduling the daily reminder: notifications are not permitted.")
+            return
+        }
+        ioThread {
+            transactionReminderLogic.scheduleReminder()
+        }
+    }
+
+    /**
+     * The user answered the POST_NOTIFICATIONS dialog.
+     *
+     * A denial is not treated as a temporary condition to retry silently. The
+     * pref keeps saying the user wants notifications, so the row stays ON and
+     * switches to the blocked presentation: what is not arriving, why, and the
+     * one action that can change it.
+     */
+    fun onNotificationPermissionResult(granted: Boolean) {
+        requestingNotificationPermission.value = false
+
+        if (granted) {
+            notificationsBlocked.value = false
+            notificationsPermanentlyDenied.value = false
+            sharedPrefs.putBoolean(SharedPrefs.NOTIFICATIONS_BLOCKED, false)
+
+            viewModelScope.launch {
+                // The permission may only just have arrived, so the work that was
+                // deliberately not scheduled while it was missing is armed now.
+                scheduleReminderIfAllowed()
+            }
+            return
+        }
+
+        notificationsBlocked.value = true
+        notificationsPermanentlyDenied.value =
+            permissionGate.needsSystemSettings(shouldShowRationale = false)
+        Timber.i(
+            "Notification permission declined; the settings row will offer a way to re-enable it."
+        )
+    }
+
+    /**
+     * Whether a system permission dialog is waiting to be shown.
+     *
+     * Read by the screen to launch it. Kept as its own accessor rather than
+     * something the screen infers, so the "ask exactly once per request" rule
+     * lives here rather than being spread across the layer that renders it.
+     */
+    @Composable
+    fun notificationPermissionRequestPending(): Boolean =
+        requestingNotificationPermission.value
+
+    /**
+     * Opens this app's notification settings.
+     *
+     * The only route left once the user has declined for good: the system will
+     * not show another dialog, so the app cannot re-request. Falls back to the
+     * app details page if the notification-specific screen is missing.
+     */
+    fun openNotificationSettings(context: Context) {
+        val intent = try {
+            permissionGate.appNotificationSettingsIntent()
+        } catch (e: ActivityNotFoundException) {
+            Timber.w(e, "No app notification settings screen; opening app details instead.")
+            permissionGate.appDetailsSettingsIntent()
+        }
+
+        // A settings Intent cannot carry FLAG_ACTIVITY_NEW_TASK when launched from
+        // an Activity context, and the activity here is the one already on top.
+        context.startActivity(intent)
     }
 
     private fun setHideCurrentBalance(hideBalance: Boolean) {

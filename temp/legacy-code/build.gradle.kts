@@ -23,4 +23,6 @@ dependencies {
     implementation(libs.datastore)
     implementation(libs.keval)
     implementation(libs.androidx.recyclerview)
+
+    testImplementation(libs.bundles.testing)
 }

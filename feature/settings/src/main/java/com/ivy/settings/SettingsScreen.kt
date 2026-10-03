@@ -1,5 +1,11 @@
 package com.ivy.settings
 
+import android.Manifest
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -20,10 +26,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +94,9 @@ fun BoxWithConstraintsScope.SettingsScreen() {
     val viewModel: SettingsViewModel = screenScopedViewModel()
     val uiState = viewModel.uiState()
     val rootScreen = rootScreen()
+    val context = LocalContext.current
+
+    NotificationsPermissionEffect(viewModel)
 
     UI(
         currencyCode = uiState.currencyCode,
@@ -92,6 +106,8 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         },
         lockApp = uiState.lockApp,
         showNotifications = uiState.showNotifications,
+        notificationsBlocked = uiState.notificationsBlocked,
+        notificationsPermanentlyDenied = uiState.notificationsPermanentlyDenied,
         hideCurrentBalance = uiState.hideCurrentBalance,
         hideIncome = uiState.hideIncome,
         progressState = uiState.progressState,
@@ -119,6 +135,9 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         },
         onSetShowNotifications = {
             viewModel.onEvent(SettingsEvent.SetShowNotifications(it))
+        },
+        onOpenNotificationSettings = {
+            viewModel.openNotificationSettings(context)
         },
         onSetHideCurrentBalance = {
             viewModel.onEvent(SettingsEvent.SetHideCurrentBalance(it))
@@ -176,6 +195,8 @@ private fun BoxWithConstraintsScope.UI(
     onSetCurrency: (String) -> Unit,
     startDateOfMonth: Int = 1,
     showNotifications: Boolean = true,
+    notificationsBlocked: Boolean = false,
+    notificationsPermanentlyDenied: Boolean = false,
     hideCurrentBalance: Boolean = false,
     hideIncome: Boolean = false,
     progressState: Boolean = false,
@@ -186,6 +207,7 @@ private fun BoxWithConstraintsScope.UI(
     onExportToXlsx: () -> Unit = {},
     onSetLockApp: (Boolean) -> Unit = {},
     onSetShowNotifications: (Boolean) -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
     onSetTreatTransfersAsIncExp: (Boolean) -> Unit = {},
     onSetHideCurrentBalance: (Boolean) -> Unit = {},
     onSetHideIncome: (Boolean) -> Unit = {},
@@ -379,11 +401,12 @@ private fun BoxWithConstraintsScope.UI(
 
             Spacer(Modifier.height(12.dp))
 
-            AppSwitch(
-                lockApp = showNotifications,
-                onSetLockApp = onSetShowNotifications,
-                text = stringResource(R.string.show_notifications),
-                icon = R.drawable.ic_notification_m
+            NotificationSwitch(
+                showNotifications = showNotifications,
+                notificationsBlocked = notificationsBlocked,
+                notificationsPermanentlyDenied = notificationsPermanentlyDenied,
+                onSetShowNotifications = onSetShowNotifications,
+                onOpenNotificationSettings = onOpenNotificationSettings,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -745,6 +768,141 @@ private fun AppThemeButton(
         description = stringResource(R.string.tap_to_switch_theme),
         onClick = onClick
     )
+}
+
+/**
+ * Owns the POST_NOTIFICATIONS request for the settings screen.
+ *
+ * This is the ONLY place in the app that asks for the permission, and it asks
+ * for one reason: the user switched notifications on. There is no prompt on
+ * launch, after onboarding, or on the first transaction - a request the user
+ * did not ask for is a request they dismiss without reading, and the answer is
+ * effectively final.
+ *
+ * The launcher is registered here, in the composition, rather than inside the
+ * click handler: registration has to happen before the lifecycle reaches
+ * STARTED, and a launcher built inside the handler is too late.
+ *
+ * The rationale bit is re-read on every resume rather than cached, because the
+ * user can grant or revoke the permission in system settings while the app is
+ * backgrounded - and auto-reset revokes it outright for anyone who has not
+ * opened the app in months.
+ */
+@Composable
+private fun NotificationsPermissionEffect(
+    viewModel: SettingsViewModel,
+) {
+    val context = LocalContext.current
+    val activity = context.findActivity() ?: return
+    val permission = Manifest.permission.POST_NOTIFICATIONS
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        viewModel.onNotificationPermissionResult(granted)
+    }
+
+    // The user just switched notifications on and the OS grant is missing, so
+    // the system dialog is what should go up. Keyed on the flag itself, so it
+    // fires once per request rather than on every recomposition.
+    val requesting = viewModel.notificationPermissionRequestPending()
+    LaunchedEffect(requesting) {
+        if (requesting) {
+            if (viewModel.requiresNotificationPermissionRequest()) {
+                launcher.launch(permission)
+            } else {
+                // Below API 33 there is nothing to ask for, so the toggle is
+                // already honoured. Report it as satisfied rather than leaving
+                // the row stuck claiming reminders are blocked.
+                viewModel.onNotificationPermissionResult(granted = true)
+            }
+        }
+    }
+
+    // Re-read on entry and on every resume: the user can grant or revoke the
+    // permission in system settings while this screen is in the background, and
+    // auto-reset revokes it outright for anyone who rarely opens the app.
+    fun refresh() {
+        viewModel.refreshNotificationPermission(
+            activity.shouldShowRequestPermissionRationale(permission)
+        )
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    DisposableEffect(activity) {
+        val listener = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refresh()
+        }
+        activity.lifecycle.addObserver(listener)
+        onDispose { activity.lifecycle.removeObserver(listener) }
+    }
+}
+
+/**
+ * Walks the Context chain to the hosting Activity, if there is one.
+ *
+ * Typed as [ComponentActivity] rather than [Activity] because only the
+ * androidx Activity hierarchy carries a Lifecycle, and the resume hook below
+ * needs one to observe.
+ */
+private fun Context.findActivity(): ComponentActivity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is ComponentActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
+/**
+ * The notifications row.
+ *
+ * When reminders cannot be delivered, the switch stays on - the user asked for
+ * them - and the row says so underneath instead of claiming a working feature.
+ * Tapping the row in that state opens the app's notification settings, because
+ * a denied permission cannot be re-requested by the app and sending the user
+ * nowhere leaves them with no way to fix it.
+ */
+@Composable
+private fun NotificationSwitch(
+    showNotifications: Boolean,
+    notificationsBlocked: Boolean,
+    notificationsPermanentlyDenied: Boolean,
+    onSetShowNotifications: (Boolean) -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+) {
+    Column {
+        AppSwitch(
+            lockApp = showNotifications,
+            onSetLockApp = onSetShowNotifications,
+            text = stringResource(R.string.show_notifications),
+            icon = R.drawable.ic_notification_m,
+            description = if (notificationsBlocked) {
+                stringResource(
+                    if (notificationsPermanentlyDenied) {
+                        R.string.notifications_blocked_open_settings
+                    } else {
+                        R.string.notifications_blocked_retry
+                    }
+                )
+            } else {
+                ""
+            },
+        )
+
+        if (notificationsBlocked) {
+            // Actionable, not decorative: this is the route that actually changes
+            // the outcome once the system will no longer prompt.
+            SettingsDefaultButton(
+                icon = R.drawable.ic_notification_m,
+                text = stringResource(R.string.open_notification_settings),
+                iconPadding = 8.dp
+            ) {
+                onOpenNotificationSettings()
+            }
+        }
+    }
 }
 
 @Composable

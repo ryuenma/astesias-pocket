@@ -15,11 +15,13 @@ import com.ivy.domain.AppStarter
 import com.ivy.legacy.utils.atEndOfDay
 import com.ivy.ui.R
 import com.ivy.wallet.android.notification.IvyNotificationChannel
+import com.ivy.wallet.android.notification.NotificationResult
 import com.ivy.wallet.android.notification.NotificationService
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 @HiltWorker
 class TransactionReminderWorker @AssistedInject constructor(
@@ -68,7 +70,22 @@ class TransactionReminderWorker @AssistedInject constructor(
                     )
                 )
 
-            notificationService.showNotification(notification, 1)
+            // The result is checked rather than ignored. On Android 13+ a user who
+            // declined POST_NOTIFICATIONS turns this into BlockedByPermission
+            // every single day, and previously that was indistinguishable from a
+            // reminder that had simply been shown.
+            when (notificationService.showNotification(notification, 1)) {
+                NotificationResult.Posted -> Unit
+
+                NotificationResult.BlockedByPermission -> Timber.i(
+                    "Daily reminder suppressed: the user has not allowed " +
+                        "notifications, so there is nothing to show them."
+                )
+
+                NotificationResult.Failed -> Timber.e(
+                    "Daily reminder could not be posted to the system."
+                )
+            }
         }
 
         return@withContext Result.success()

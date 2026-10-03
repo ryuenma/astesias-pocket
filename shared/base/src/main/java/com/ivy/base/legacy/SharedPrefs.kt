@@ -22,6 +22,24 @@ class SharedPrefs @Inject constructor(
         const val APP_LOCK_ENABLED = "lock_app"
         const val START_DATE_OF_MONTH = "start_date_of_month"
         const val SHOW_NOTIFICATIONS = "show_notifications"
+
+        /**
+         * Whether we have ever shown the POST_NOTIFICATIONS system dialog.
+         *
+         * Not cosmetic. `shouldShowRequestPermissionRationale()` is false both
+         * before the first ask and after a permanent denial, so this is the only
+         * thing that tells those two states apart. See NotificationPermissionGate.
+         */
+        const val NOTIFICATIONS_PERMISSION_ASKED = "notifications_permission_asked"
+
+        /**
+         * Set when a notification was dropped for lack of POST_NOTIFICATIONS.
+         *
+         * The reminder worker runs in the background where it cannot show
+         * anything, so a denial has to be written down for the settings screen
+         * to surface later. See NotificationService.showNotification.
+         */
+        const val NOTIFICATIONS_BLOCKED = "notifications_blocked"
         const val HIDE_CURRENT_BALANCE = "hide_current_balance"
         const val HIDE_INCOME = "hide_income"
         const val TRANSFERS_AS_INCOME_EXPENSE = "transfers_as_inc_exp"

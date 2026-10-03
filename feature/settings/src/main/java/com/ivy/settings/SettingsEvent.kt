@@ -20,4 +20,14 @@ sealed interface SettingsEvent {
     data object DeleteCloudUserData : SettingsEvent
     data object DeleteAllUserData : SettingsEvent
     data object SwitchLanguage : SettingsEvent
+
+    /**
+     * The user answered the POST_NOTIFICATIONS dialog.
+     *
+     * Reported back into the ViewModel rather than acted on in the composable,
+     * so the outcome is applied to the pref, the WorkManager schedule and the
+     * blocked flag in one place instead of being split across two layers that
+     * can disagree.
+     */
+    data class NotificationPermissionResult(val granted: Boolean) : SettingsEvent
 }

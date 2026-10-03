@@ -67,6 +67,22 @@ class TransactionReminderLogic @Inject constructor(
             )
     }
 
+    /**
+     * Stops the daily reminder for good.
+     *
+     * scheduleReminder() is deliberately a no-op when the pref is off, which is
+     * correct for "don't add another one" and wrong for "take the existing one
+     * away". Without this, switching notifications off left the 24-hour
+     * TransactionReminderWorker enqueued: it kept waking up every day, read the
+     * pref, and skipped the notification - so the setting looked inert and the
+     * app still held a wakeup alarm the user had switched off.
+     */
+    fun cancelReminder() {
+        WorkManager
+            .getInstance(appContext)
+            .cancelUniqueWork(UNIQUE_WORK_NAME_V2)
+    }
+
     private fun fetchShowNotifications(): Boolean =
         sharedPrefs.getBoolean(SharedPrefs.SHOW_NOTIFICATIONS, true)
 }

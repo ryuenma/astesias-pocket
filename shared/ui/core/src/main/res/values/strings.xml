@@ -344,6 +344,9 @@
     <string name="expired">Expired</string>
     <string name="authentication_succeeded">Authentication successful!</string>
     <string name="authentication_failed">Authentication failed.</string>
+    <string name="notifications_blocked_retry">Reminders are off — Android is not allowing notifications. Tap to allow them.</string>
+    <string name="notifications_blocked_open_settings">Reminders are off — Android is blocking notifications. Open notification settings to allow them.</string>
+    <string name="open_notification_settings">Open notification settings</string>
     <string name="notification_1">Did you make any transactions today? 🏁</string>
     <string name="notification_2">Did you record your transactions today? 💸</string>
     <string name="notification_3">Review your spending for today! 💳</string>
