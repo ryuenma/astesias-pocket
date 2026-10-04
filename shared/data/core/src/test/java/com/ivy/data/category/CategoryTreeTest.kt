@@ -468,4 +468,192 @@ class CategoryTreeTest {
         tree.roots shouldBe emptyList()
         tree.rollupIdsOf(emptyList()) shouldBe emptySet()
     }
+
+    /**
+     * Sibling-name uniqueness, the rule three other subsystems assume.
+     *
+     * These are the assertions that were missing. Nothing anywhere checked a
+     * name for uniqueness, so "QAChild" could be created twice under one parent
+     * and the app carried on - while `getReplacementPairs` paired ids BY name,
+     * the transaction delete-confirmation compares a TYPED NAME against the
+     * category name, and CSV import resolves existing categories by
+     * `name.lowercase()`. A duplicated name quietly breaks all three.
+     */
+    @Test
+    fun `two top-level categories cannot share a name`() {
+        val tree = CategoryTree.of(listOf(category("Food"), category("Rent")))
+
+        tree.hasSiblingNamed(name = "Food", parentId = null) shouldBe true
+        tree.hasSiblingNamed(name = "Rent", parentId = null) shouldBe true
+    }
+
+    /**
+     * The point of the hierarchy: the SAME name is legal under two different
+     * parents. Scoping uniqueness to the whole app would make nesting
+     * pointless.
+     */
+    @Test
+    fun `the same name under different parents is allowed`() {
+        val food = category("Food")
+        val bills = category("Bills")
+        val tree = CategoryTree.of(
+            listOf(
+                food,
+                bills,
+                category("Coffee", parentId = food.id),
+                category("Coffee", parentId = bills.id),
+            )
+        )
+
+        tree.hasSiblingNamed(name = "Coffee", parentId = food.id) shouldBe true
+        tree.hasSiblingNamed(name = "Coffee", parentId = bills.id) shouldBe true
+    }
+
+    @Test
+    fun `a name free under one parent is not taken by another parent's child`() {
+        val food = category("Food")
+        val tree = CategoryTree.of(
+            listOf(
+                food,
+                category("Coffee", parentId = food.id),
+                category("Bills"),
+            )
+        )
+
+        // "Coffee" exists, but only as Food's child, so it is free at the top.
+        tree.hasSiblingNamed(name = "Coffee", parentId = null) shouldBe false
+    }
+
+    /**
+     * The bug in miniature: a previous agent created "QAChild" twice under one
+     * parent during on-device testing. This is the assertion that would have
+     * caught it.
+     */
+    @Test
+    fun `a duplicate child under one parent is detected`() {
+        val food = category("Food")
+        val tree = CategoryTree.of(
+            listOf(
+                food,
+                category("QAChild", parentId = food.id),
+                category("QAChild", parentId = food.id),
+            )
+        )
+
+        tree.hasSiblingNamed(name = "QAChild", parentId = food.id) shouldBe true
+    }
+
+    /**
+     * Editing must not reject a category for keeping its own name. Without
+     * `excluding`, every save that does not rename anything would be refused -
+     * which reads to the user as "this app will not let me edit my category".
+     */
+    @Test
+    fun `a category does not collide with itself when excluded`() {
+        val food = category("Food")
+        val tree = CategoryTree.of(listOf(food))
+
+        tree.hasSiblingNamed(
+            name = "Food",
+            parentId = null,
+            excluding = food.id
+        ) shouldBe false
+
+        // The same lookup WITHOUT the exclusion is a collision, which is what
+        // makes the exclusion load-bearing rather than decorative.
+        tree.hasSiblingNamed(name = "Food", parentId = null) shouldBe true
+    }
+
+    /**
+     * Moving a category must be checked against the NEW parent's children, not
+     * the ones being left behind.
+     */
+    @Test
+    fun `moving a category under a parent that already has that name collides`() {
+        val food = category("Food")
+        val bills = category("Bills")
+        val coffee = category("Coffee")
+        val tree = CategoryTree.of(
+            listOf(
+                food,
+                bills,
+                coffee,
+                category("Coffee", parentId = food.id),
+            )
+        )
+
+        // Legal where it is now.
+        tree.hasSiblingNamed(
+            name = coffee.name.value,
+            parentId = coffee.parentId,
+            excluding = coffee.id
+        ) shouldBe false
+
+        // Illegal the moment it moves under Food, which already has a "Coffee".
+        tree.hasSiblingNamed(
+            name = coffee.name.value,
+            parentId = food.id,
+            excluding = coffee.id
+        ) shouldBe true
+    }
+
+    /**
+     * CSV import resolves existing categories by `name.lowercase()`, so "Food"
+     * and "food" are the SAME key to it. Exact-case uniqueness would let both
+     * exist as siblings and hand that importer an ambiguous key again -
+     * reintroducing the very defect this rule exists to close.
+     */
+    @Test
+    fun `name matching ignores case and surrounding whitespace`() {
+        val tree = CategoryTree.of(listOf(category("Food")))
+
+        tree.hasSiblingNamed(name = "food", parentId = null) shouldBe true
+        tree.hasSiblingNamed(name = "FOOD", parentId = null) shouldBe true
+        tree.hasSiblingNamed(name = "  Food  ", parentId = null) shouldBe true
+    }
+
+    /**
+     * A blank name is "not yet typed", not "a category called empty". Reporting
+     * it as a duplicate would put the error on screen before the user has typed
+     * anything.
+     */
+    @Test
+    fun `a blank name is never a duplicate`() {
+        val tree = CategoryTree.of(listOf(category("Food")))
+
+        tree.hasSiblingNamed(name = "", parentId = null) shouldBe false
+        tree.hasSiblingNamed(name = "   ", parentId = null) shouldBe false
+    }
+
+    /**
+     * Siblinghood is decided on the stored parentId, not on what the picker
+     * renders. An orphan is DISPLAYED as a root by [CategoryTree.of], but it is
+     * not a sibling of one, and treating it as such would make the uniqueness
+     * rule depend on a display depth cap.
+     */
+    @Test
+    fun `an orphan displayed at the top level is not a root sibling`() {
+        val goneParentId = CategoryId(UUID.randomUUID())
+        val food = category("Food")
+        val orphan = category("Food", parentId = goneParentId)
+        val tree = CategoryTree.of(listOf(food, orphan))
+
+        // The tree promotes the orphan so the user can still file under it.
+        tree.roots.map { it.name.value } shouldBe listOf("Food", "Food")
+
+        // But its stored parent is not null, so it is not a top-level collision
+        // - it is scoped to the parent that no longer exists.
+        tree.hasSiblingNamed(name = "Food", parentId = goneParentId) shouldBe true
+    }
+
+    @Test
+    fun `empty tree - no name is taken`() {
+        val tree = CategoryTree.of(emptyList())
+
+        tree.hasSiblingNamed(name = "Food", parentId = null) shouldBe false
+        tree.hasSiblingNamed(
+            name = "Food",
+            parentId = CategoryId(UUID.randomUUID())
+        ) shouldBe false
+    }
 }

@@ -62,6 +62,7 @@ import com.ivy.ui.R
 import com.ivy.wallet.domain.deprecated.logic.model.CreateCategoryData
 import com.ivy.wallet.ui.theme.Ivy
 import com.ivy.wallet.ui.theme.Orange
+import com.ivy.wallet.ui.theme.Red
 import com.ivy.wallet.ui.theme.components.ItemIconMDefaultIcon
 import com.ivy.wallet.ui.theme.components.ItemIconSDefaultIcon
 import com.ivy.wallet.ui.theme.components.IvyBorderButton
@@ -141,6 +142,24 @@ fun BoxWithConstraintsScope.CategoryModal(
         mutableStateOf(false)
     }
 
+    // The sibling-uniqueness rule, live. Two categories may share a name only
+    // if they sit under different parents, so the scope of this check follows
+    // `parentId`: picking a different parent re-evaluates it against that
+    // parent's children. `initialCategory.id` is excluded so editing a category
+    // without renaming it is not a collision with itself.
+    //
+    // The same rule is enforced in CategoryCreator against the database. This
+    // copy exists purely so the user finds out while typing rather than after a
+    // save that did nothing.
+    val siblingTree = remember(categories) { CategoryTree.of(categories) }
+    val nameIsTaken = remember(nameTextFieldValue.text, parentId, siblingTree, initialCategory) {
+        siblingTree.hasSiblingNamed(
+            name = nameTextFieldValue.text,
+            parentId = parentId,
+            excluding = initialCategory?.id
+        )
+    }
+
     IvyModal(
         id = modal?.id,
         visible = modal != null,
@@ -148,7 +167,10 @@ fun BoxWithConstraintsScope.CategoryModal(
         PrimaryAction = {
             ModalAddSave(
                 item = modal?.category,
-                enabled = nameTextFieldValue.text.isNotNullOrBlank()
+                // A duplicate is blocked here rather than caught on save. The
+                // inline message says why, and a Save that dismisses the modal
+                // without storing anything reads as data loss.
+                enabled = nameTextFieldValue.text.isNotNullOrBlank() && !nameIsTaken
             ) {
                 if (initialCategory != null) {
                     val updatedCategory = either {
@@ -195,20 +217,46 @@ fun BoxWithConstraintsScope.CategoryModal(
 
         Spacer(Modifier.height(24.dp))
 
-        IconNameRow(
-            hint = stringResource(R.string.category_name),
-            defaultIcon = R.drawable.ic_custom_category_m,
-            color = color,
-            icon = icon?.id,
+        // Column so the validation message sits directly under the name field
+        // it is about. IconNameRow is a Row and cannot host it.
+        Column {
+            IconNameRow(
+                hint = stringResource(R.string.category_name),
+                defaultIcon = R.drawable.ic_custom_category_m,
+                color = color,
+                icon = icon?.id,
 
-            autoFocusKeyboard = modal?.autoFocusKeyboard ?: true,
+                autoFocusKeyboard = modal?.autoFocusKeyboard ?: true,
 
-            nameTextFieldValue = nameTextFieldValue,
-            setNameTextFieldValue = { nameTextFieldValue = it },
-            showChooseIconModal = {
-                chooseIconModalVisible = true
+                nameTextFieldValue = nameTextFieldValue,
+                setNameTextFieldValue = { nameTextFieldValue = it },
+                showChooseIconModal = {
+                    chooseIconModalVisible = true
+                }
+            )
+
+            // Two wordings because they are different mistakes: the second one
+            // tells the user the name is fine elsewhere in the tree, which is
+            // the whole point of nesting and is otherwise baffling.
+            if (nameIsTaken) {
+                Text(
+                    modifier = Modifier
+                        .padding(start = 64.dp, end = 36.dp)
+                        .testTag("modal_category_name_taken"),
+                    text = stringResource(
+                        if (parentId == null) {
+                            R.string.category_name_taken
+                        } else {
+                            R.string.category_name_taken_sibling
+                        }
+                    ),
+                    style = UI.typo.b2.style(
+                        color = Red,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                )
             }
-        )
+        }
 
         Spacer(Modifier.height(32.dp))
 

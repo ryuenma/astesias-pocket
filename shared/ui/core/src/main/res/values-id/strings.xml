@@ -210,6 +210,8 @@
     <string name="edit_category">Edit kategori</string>
     <string name="create_category">Buat kategori</string>
     <string name="category_name">Nama kategori</string>
+    <string name="category_name_taken">Kategori dengan nama ini sudah ada di sini</string>
+    <string name="category_name_taken_sibling">Kategori lain di bawah induk ini sudah memakai nama tersebut</string>
     <string name="parent_category">Kategori induk</string>
     <string name="no_parent_category">Tidak ada (tingkat atas)</string>
     <string name="choose_category">Pilih kategori</string>

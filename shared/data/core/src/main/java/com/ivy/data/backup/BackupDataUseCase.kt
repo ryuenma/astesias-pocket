@@ -33,6 +33,7 @@ import com.ivy.data.repository.AccountRepository
 import com.ivy.data.repository.mapper.AccountMapper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -241,9 +242,9 @@ class BackupDataUseCase @Inject constructor(
         onProgress: suspend (Double) -> Unit = {},
         clearCacheDir: Boolean = false,
     ): ImportResult {
-        val modifiedJsonString = accommodateExistingAccountsAndCategories(jsonString)
-        val ivyWalletCompleteData = modifiedJsonString?.let {
-            json.decodeFromString<IvyWalletCompleteData>(it)
+        val accommodated = accommodateExistingAccountsAndCategories(jsonString)
+        val ivyWalletCompleteData = accommodated?.let {
+            json.decodeFromString<IvyWalletCompleteData>(it.json)
         } ?: error("Failed to parse backup JSON.")
 
         onProgress(0.4)
@@ -259,22 +260,31 @@ class BackupDataUseCase @Inject constructor(
             transactionsImported = ivyWalletCompleteData.transactions.size,
             accountsImported = ivyWalletCompleteData.accounts.size,
             categoriesImported = ivyWalletCompleteData.categories.size,
-            failedRows = persistentListOf()
+            failedRows = persistentListOf(),
+            duplicateNameWarnings = accommodated.ambiguousNames.toImmutableList()
         )
     }
 
-    private suspend fun accommodateExistingAccountsAndCategories(jsonString: String?): String? {
+    private suspend fun accommodateExistingAccountsAndCategories(
+        jsonString: String?
+    ): AccommodatedBackup? {
         if (jsonString == null) return null
 
         val ivyWalletCompleteData = json.decodeFromString<IvyWalletCompleteData>(jsonString)
-        val replacementPairs = getReplacementPairs(ivyWalletCompleteData)
+        val plan = getReplacementPairs(ivyWalletCompleteData)
 
-        var modifiedString = jsonString
-        replacementPairs.forEach {
-            modifiedString = modifiedString!!.replace(it.first.toString(), it.second.toString())
+        // Typed explicitly rather than inferred from the `String?` parameter:
+        // assigning inside a lambda invalidates the smart cast, and `!!` on
+        // every iteration would just be that cast written louder.
+        var modifiedString: String = jsonString
+        plan.pairs.forEach {
+            modifiedString = modifiedString.replace(it.first.toString(), it.second.toString())
         }
 
-        return modifiedString
+        return AccommodatedBackup(
+            json = modifiedString,
+            ambiguousNames = plan.ambiguousNames,
+        )
     }
 
     private suspend fun insertDataToDb(
@@ -353,14 +363,117 @@ class BackupDataUseCase @Inject constructor(
         }
     }
 
-    /** This is used to replace account & category Ids in backup data with existing Ids
-     *  This removes the problem of duplicate Accounts & Categories
+    /**
+     * One row on its way in, tagged with where it came from.
      *
-     *  returns a Pair<A,B> of IDs where A is the UUID that needs to be replaced with B
+     * The tag is the point: the old code inferred "is this from the backup?"
+     * with `list.contains(row)`, a data-class equality check that answers
+     * wrongly whenever an existing row happens to be identical to a backup row.
+     * Carrying the origin alongside the row cannot be wrong.
+     */
+    private data class Sourced<T>(
+        val row: T,
+        val fromBackup: Boolean,
+    )
+
+    /**
+     * The rewritten backup JSON, plus the names whose ids could not be
+     * reconciled.
+     *
+     * [ambiguousNames] is empty in the healthy case. When it is not, the import
+     * still proceeds - refusing to restore somebody's ledger over a naming
+     * collision is its own kind of data loss - but the collisions are reported
+     * to the user instead of being resolved by guessing.
+     */
+    private data class AccommodatedBackup(
+        val json: String,
+        val ambiguousNames: List<String>,
+    )
+
+    /**
+     * Ids to rewrite in the incoming backup.
+     *
+     * [ambiguousNames] names the groups no pair was emitted for; see
+     * [replacementPlan] for why those have no single correct answer.
+     */
+    private data class ReplacementPlan(
+        val pairs: List<Pair<UUID, UUID>>,
+        val ambiguousNames: List<String>,
+    )
+
+    /**
+     * Pair up backup Ids with existing Ids so an import does not duplicate rows.
+     *
+     * **The rule is "exactly one existing and exactly one backup", not "the name
+     * appears twice".** Those differ, and the difference is the bug: this used to
+     * accept any name group of size 2, which silently produced two different
+     * wrong answers.
+     *
+     *  - 2 existing, 0 backup (a name duplicated on the device). The old code
+     *    paired the two EXISTING ids to each other and rewrote every reference
+     *    from one to the other across the whole backup. That is not
+     *    deduplication, it is corruption of ids that were already correct, and
+     *    it was silent.
+     *  - 3 or more of anything. The old code dropped these via
+     *    `filter { it.value.size == 2 }` and said nothing, so the import
+     *    reported success while reconciling nothing.
+     *
+     * Pairing is only well-defined when there is exactly one candidate on each
+     * side; that is the sole case where "A must become B" has a single answer.
+     * Every other composition is ambiguous, so it is reported and no pair is
+     * emitted. Guessing is never right here: the backup's transaction rows
+     * point at specific category ids, so picking the wrong one silently files a
+     * user's spending under the wrong category.
+     *
+     * Neither duplicate-name fixture in this repo's test resources
+     * (`450-150.json`, the owner's real sample) contains a repeated name, so
+     * this changes nothing for any known-good backup.
+     */
+    private fun <T> replacementPlan(
+        existing: List<T>,
+        fromBackup: List<T>,
+        name: (T) -> String,
+        id: (T) -> UUID,
+    ): ReplacementPlan {
+        val sourced = existing.map { Sourced(it, fromBackup = false) } +
+            fromBackup.map { Sourced(it, fromBackup = true) }
+
+        val pairs = mutableListOf<Pair<UUID, UUID>>()
+        val ambiguous = mutableListOf<String>()
+
+        for ((groupName, group) in sourced.groupBy { name(it.row) }) {
+            val existingRows = group.filter { !it.fromBackup }.map { it.row }
+            val backupRows = group.filter { it.fromBackup }.map { it.row }
+
+            if (existingRows.size == 1 && backupRows.size == 1) {
+                // The one unambiguous case: one of ours, one of theirs.
+                // Backup id -> existing id.
+                pairs += Pair(id(backupRows[0]), id(existingRows[0]))
+            } else if (existingRows.size > 1 || backupRows.size > 1) {
+                // Duplicates on one side or on both: no single defensible pair.
+                Timber.w(
+                    "Backup import: '$groupName' appears ${existingRows.size}x in the " +
+                        "database and ${backupRows.size}x in the backup. Ids for it " +
+                        "cannot be reconciled without guessing, so no replacement " +
+                        "was made - expect this category to be duplicated."
+                )
+                ambiguous += groupName
+            }
+            // A name only the backup has, appearing exactly once, needs no
+            // reconciliation and is not worth reporting.
+        }
+
+        return ReplacementPlan(pairs = pairs, ambiguousNames = ambiguous.distinct().sorted())
+    }
+
+    /**
+     * Replace account & category Ids in backup data with existing Ids.
+     *
+     * Ambiguous names are returned rather than resolved; see [replacementPlan].
      */
     private suspend fun getReplacementPairs(
         completeData: IvyWalletCompleteData
-    ): List<Pair<UUID, UUID>> {
+    ): ReplacementPlan {
         return withContext(dispatchersProvider.io) {
             val existingAccountsList = accountDao.findAll()
             val existingCategoryList = categoryDao.findAll()
@@ -369,39 +482,33 @@ class BackupDataUseCase @Inject constructor(
             val backupCategoryList = completeData.categories
 
             if (existingAccountsList.isEmpty() && existingCategoryList.isEmpty()) {
-                return@withContext emptyList()
+                return@withContext ReplacementPlan(pairs = emptyList(), ambiguousNames = emptyList())
             }
 
-            val sumAccountList = existingAccountsList + backupAccountsList
-            val sumCategoriesList = existingCategoryList + backupCategoryList
-
-            val accountsReplace = async {
-                sumAccountList.groupBy { it.name }.filter { it.value.size == 2 }.map {
-                    val accountsZero = it.value[0]
-                    val accountsFirst = it.value[1]
-
-                    if (backupAccountsList.contains(accountsZero)) {
-                        Pair(accountsZero.id, accountsFirst.id)
-                    } else {
-                        Pair(accountsFirst.id, accountsZero.id)
-                    }
-                }
+            val accounts = async {
+                replacementPlan(
+                    existing = existingAccountsList,
+                    fromBackup = backupAccountsList,
+                    name = { it.name },
+                    id = { it.id },
+                )
+            }
+            val categories = async {
+                replacementPlan(
+                    existing = existingCategoryList,
+                    fromBackup = backupCategoryList,
+                    name = { it.name },
+                    id = { it.id },
+                )
             }
 
-            val categoriesReplace = async {
-                sumCategoriesList.groupBy { it.name }.filter { it.value.size == 2 }.map {
-                    val categoryZero = it.value[0]
-                    val categoryFirst = it.value[1]
+            val accountsPlan = accounts.await()
+            val categoriesPlan = categories.await()
 
-                    if (completeData.categories.contains(categoryZero)) {
-                        Pair(categoryZero.id, categoryFirst.id)
-                    } else {
-                        Pair(categoryFirst.id, categoryZero.id)
-                    }
-                }
-            }
-
-            accountsReplace.await() + categoriesReplace.await()
+            ReplacementPlan(
+                pairs = accountsPlan.pairs + categoriesPlan.pairs,
+                ambiguousNames = accountsPlan.ambiguousNames + categoriesPlan.ambiguousNames,
+            )
         }
     }
 

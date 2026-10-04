@@ -1,6 +1,7 @@
 package com.ivy.data.backup
 
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 data class ImportResult(
     val rowsFound: Int,
@@ -17,6 +18,20 @@ data class ImportResult(
      * should surface this rather than reporting a silent success.
      */
     val errorMessage: String? = null,
+    /**
+     * Names the import could not safely reconcile against the database.
+     *
+     * Fork: `getReplacementPairs` used to pair ids by name and drop any name
+     * group that did not fit, so a name appearing three or more times was
+     * ignored with no signal at all - the import reported success having
+     * silently reconciled nothing. Duplicated names are now reported here
+     * instead.
+     *
+     * NOT an [errorMessage]: the import itself succeeded and the user's data
+     * is intact. What happened is that this category may now exist twice, which
+     * is worth saying out loud rather than hiding.
+     */
+    val duplicateNameWarnings: ImmutableList<String> = persistentListOf(),
 ) {
     val isSuccess: Boolean get() = errorMessage == null
 }

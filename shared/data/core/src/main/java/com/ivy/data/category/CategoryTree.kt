@@ -36,6 +36,16 @@ class CategoryTree private constructor(
     /** Categories to render at the top level, in the caller's order. */
     val roots: List<Category>,
     private val childrenByParent: Map<CategoryId?, List<Category>>,
+    /**
+     * Every category indexed by its stored [Category.parentId], INCLUDING the
+     * `null` key for top-level ones.
+     *
+     * Distinct from [childrenByParent], which is filtered to non-null parents
+     * because it drives rendering. Sibling-uniqueness needs the reverse: a
+     * `null` lookup here means "the top level", a real scope that two roots
+     * are not allowed to share a name within.
+     */
+    private val allByParent: Map<CategoryId?, List<Category>>,
     private val rootIds: Set<CategoryId>,
     private val rollups: Map<CategoryId, Set<UUID>>,
     private val idsByValue: Map<UUID, CategoryId>,
@@ -107,6 +117,45 @@ class CategoryTree private constructor(
         candidate == null || candidate.value !in rollups[category.id].orEmpty()
 
     /**
+     * Whether some category under [parentId] is already called [name].
+     *
+     * This is the sibling-uniqueness rule: two categories may share a name as
+     * long as they sit under DIFFERENT parents, which is the entire point of
+     * having a hierarchy at all. A top-level name is unique among top-level
+     * names; a name under "Food & Drinks" is unique among that parent's
+     * children only.
+     *
+     * `null` [parentId] means "top level" and is a real scope, not a wildcard:
+     * two roots cannot share a name either.
+     *
+     * [excluding] is the category being edited, so a category that keeps its
+     * own name does not collide with itself. Passing the id being saved is what
+     * makes "rename, keep the name" and "rename" behave differently.
+     *
+     * Siblinghood is decided on the stored [Category.parentId], NOT on what the
+     * picker renders. An orphan and a third-level category are *displayed* at
+     * the top level by [of], but they are not siblings of a root, and treating
+     * them as such would make the rule depend on a display cap.
+     *
+     * Case-insensitive, because name-as-key is already the de-facto contract
+     * three consumers rely on: CSV import matches existing categories by
+     * `name.lowercase()`. Enforcing exact-case uniqueness here would let "Food"
+     * and "food" coexist as siblings and hand that importer an ambiguous key
+     * all over again.
+     */
+    fun hasSiblingNamed(
+        name: String,
+        parentId: CategoryId?,
+        excluding: CategoryId? = null,
+    ): Boolean {
+        val wanted = name.trim()
+        if (wanted.isEmpty()) return false
+        return allByParent[parentId].orEmpty().any { sibling ->
+            sibling.id != excluding && sibling.name.value.equals(wanted, ignoreCase = true)
+        }
+    }
+
+    /**
      * The categories offered as parents when editing [category]: the roots,
      * minus everything that would make the hierarchy invalid.
      *
@@ -163,6 +212,7 @@ class CategoryTree private constructor(
             return CategoryTree(
                 roots = roots,
                 childrenByParent = childrenByParent,
+                allByParent = categories.groupBy(Category::parentId),
                 rootIds = roots.mapTo(mutableSetOf(), Category::id),
                 rollups = rollupsOf(categories, childrenByParent),
                 idsByValue = categories.associate { it.id.value to it.id },
