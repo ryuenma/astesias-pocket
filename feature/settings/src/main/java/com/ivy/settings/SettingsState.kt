@@ -36,4 +36,13 @@ data class SettingsState(
      * NotificationPermissionGate.
      */
     val notificationsPermanentlyDenied: Boolean = false,
+    /**
+     * How many incoming transfers are waiting for her to accept or decline.
+     *
+     * Surfaced on the Settings row rather than only inside the inbox, because a
+     * count nobody can see is the same defect as an inbox nobody can open: she
+     * has no way to learn that money is waiting. Zero hides nothing - the row
+     * still exists, so the destination is discoverable before it is ever needed.
+     */
+    val pendingTransfersCount: Int = 0,
 )

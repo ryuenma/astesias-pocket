@@ -88,6 +88,19 @@ data object SettingsScreen : Screen {
         get() = true
 }
 
+/**
+ * The counterpart's inbox: incoming transfers waiting to be accepted or declined.
+ *
+ * Reachable from Settings. It has to be its own destination rather than a modal
+ * bolted onto the transaction form, because confirming money is not a step in
+ * recording a transaction - someone who has never recorded a transfer still has
+ * to be able to accept one.
+ */
+data object PendingTransfersScreen : Screen {
+    override val isLegacy: Boolean
+        get() = true
+}
+
 data object ReportScreen : Screen {
     override val isLegacy: Boolean
         get() = true

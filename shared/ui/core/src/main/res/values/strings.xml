@@ -348,8 +348,8 @@
     <string name="expired">Expired</string>
     <string name="authentication_succeeded">Authentication successful!</string>
     <string name="authentication_failed">Authentication failed.</string>
-    <string name="notifications_blocked_retry">Reminders are off — Android is not allowing notifications. Tap to allow them.</string>
-    <string name="notifications_blocked_open_settings">Reminders are off — Android is blocking notifications. Open notification settings to allow them.</string>
+    <string name="notifications_blocked_retry">Reminders are off. Android is not allowing notifications. Tap to allow them.</string>
+    <string name="notifications_blocked_open_settings">Reminders are off. Android is blocking notifications. Open notification settings to allow them.</string>
     <string name="open_notification_settings">Open notification settings</string>
     <string name="notification_1">Did you make any transactions today? 🏁</string>
     <string name="notification_2">Did you record your transactions today? 💸</string>
@@ -501,12 +501,17 @@
     <string name="belongs_to">Belongs to %1$s</string>
     <string name="change">Change</string>
 
+    <!-- Accessibility: expand/collapse a category row -->
+    <string name="expand_category">Expand %1$s</string>
+    <string name="collapse_category">Collapse %1$s</string>
+
     <!-- Incoming transfers awaiting confirmation -->
     <string name="pending_transfers_title">Confirm incoming</string>
     <string name="pending_transfers_description">These transfers have been sent to you but aren’t in your balance yet. Accept one to record it, or decline it.</string>
     <string name="no_pending_transfers">Nothing to confirm</string>
     <string name="pending_transfer_accept">Accept</string>
     <string name="pending_transfer_decline">Decline</string>
+    <string name="pending_transfers_waiting">%1$d waiting for you to accept or decline</string>
 
     <!-- Sync server -->
     <string name="sync_server">Sync with your partner</string>

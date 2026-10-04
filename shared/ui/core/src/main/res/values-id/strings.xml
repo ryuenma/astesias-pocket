@@ -456,6 +456,10 @@
     <string name="belongs_to">Milik %1$s</string>
     <string name="change">Ubah</string>
 
+    <!-- Accessibility: expand/collapse a category row -->
+    <string name="expand_category">Buka %1$s</string>
+    <string name="collapse_category">Tutup %1$s</string>
+
     <!-- Sinkronisasi -->
     <string name="sync_server">Sinkronkan dengan pasangan</string>
     <string name="sync_server_explainer">Masuk untuk berbagi daftar akun, agar transfer ke pasangan bisa menunjuk tujuan yang nyata. Kata sandi hanya dipakai sekali dan tidak pernah disimpan.</string>

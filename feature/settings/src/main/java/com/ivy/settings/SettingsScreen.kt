@@ -62,6 +62,7 @@ import com.ivy.navigation.AttributionsScreen
 import com.ivy.navigation.FeaturesScreen
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.Navigation
+import com.ivy.navigation.PendingTransfersScreen
 import com.ivy.data.sync.DirectoryAuthApi
 import com.ivy.data.sync.SyncConfig
 import com.ivy.navigation.navigation
@@ -108,6 +109,7 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         showNotifications = uiState.showNotifications,
         notificationsBlocked = uiState.notificationsBlocked,
         notificationsPermanentlyDenied = uiState.notificationsPermanentlyDenied,
+        pendingTransfersCount = uiState.pendingTransfersCount,
         hideCurrentBalance = uiState.hideCurrentBalance,
         hideIncome = uiState.hideIncome,
         progressState = uiState.progressState,
@@ -197,6 +199,7 @@ private fun BoxWithConstraintsScope.UI(
     showNotifications: Boolean = true,
     notificationsBlocked: Boolean = false,
     notificationsPermanentlyDenied: Boolean = false,
+    pendingTransfersCount: Int = 0,
     hideCurrentBalance: Boolean = false,
     hideIncome: Boolean = false,
     progressState: Boolean = false,
@@ -289,6 +292,17 @@ private fun BoxWithConstraintsScope.UI(
                 profile = syncProfile,
                 onClick = { syncModalVisible = true }
             )
+
+            Spacer(Modifier.height(12.dp))
+
+            // The entry point the inbox never had. Placed beside "Sync with your
+            // partner" because that is the feature it belongs to: a transfer can
+            // only arrive here if the two devices are paired in the first place.
+            PendingTransfersRow(
+                pendingCount = pendingTransfersCount
+            ) {
+                nav.navigateTo(PendingTransfersScreen)
+            }
 
 //            Spacer(Modifier.height(20.dp))
 //            Premium()
@@ -1017,6 +1031,82 @@ private fun SyncServerRow(
             },
             style = UI.typo.nC.style(
                 color = if (profile != null) UI.colors.green else UI.colors.gray
+            )
+        )
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/**
+ * Settings row for the partner's incoming transfers.
+ *
+ * Always present, never conditional on there being something to show. A row
+ * that only appears when money has arrived is a row nobody learns to recognise,
+ * and the whole point of this entry point is that the inbox is findable BEFORE
+ * she needs it. When the count is above zero it reads as an alert; when it is
+ * zero it reads as "nothing waiting", which is also worth saying.
+ */
+@Composable
+private fun PendingTransfersRow(
+    pendingCount: Int,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(UI.shapes.r2)
+            .background(UI.colors.medium, UI.shapes.r2)
+            .clickable { onClick() }
+    ) {
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_pending_transfers_row"),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(Modifier.width(24.dp))
+
+            Text(
+                text = stringResource(R.string.pending_transfers_title),
+                style = UI.typo.c.style(
+                    fontWeight = FontWeight.Black,
+                    color = UI.colors.gray
+                )
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            if (pendingCount > 0) {
+                // A badge, not just a colour change: the number is the fact, and
+                // colour alone would leave a screen-reader user with no way to
+                // learn that money is waiting.
+                Text(
+                    text = pendingCount.toString(),
+                    style = UI.typo.c.style(
+                        fontWeight = FontWeight.Black,
+                        color = UI.colors.green
+                    )
+                )
+
+                Spacer(Modifier.width(24.dp))
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            text = if (pendingCount > 0) {
+                stringResource(R.string.pending_transfers_waiting, pendingCount)
+            } else {
+                stringResource(R.string.no_pending_transfers)
+            },
+            style = UI.typo.nC.style(
+                color = if (pendingCount > 0) UI.colors.green else UI.colors.gray
             )
         )
 

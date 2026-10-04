@@ -19,7 +19,6 @@ import com.ivy.base.time.TimeProvider
 import com.ivy.data.db.dao.read.LoanDao
 import com.ivy.data.db.dao.read.SettingsDao
 import com.ivy.data.db.entity.DirectoryAccountEntity
-import com.ivy.data.db.entity.PendingTransferEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.CategoryId
 import com.ivy.data.model.Tag
@@ -29,8 +28,6 @@ import com.ivy.data.model.primitive.AssociationId
 import com.ivy.data.model.primitive.NotBlankTrimmedString
 import com.ivy.data.profile.DirectoryRepository
 import com.ivy.data.sync.DirectorySyncRepository
-import com.ivy.domain.usecase.transfer.PendingTransferRepository
-import com.ivy.domain.usecase.transfer.TransferInbox
 import com.ivy.data.profile.ProfileId
 import com.ivy.data.repository.CategoryRepository
 import com.ivy.data.repository.TagRepository
@@ -106,7 +103,6 @@ class EditTransactionViewModel @Inject constructor(
     private val toaster: Toaster,
     private val directoryRepository: DirectoryRepository,
     private val directorySync: DirectorySyncRepository,
-    private val pendingTransferRepository: PendingTransferRepository,
     private val loanDao: LoanDao,
     private val settingsDao: SettingsDao,
     private val nav: Navigation,
@@ -149,11 +145,6 @@ class EditTransactionViewModel @Inject constructor(
     /** Other profiles' accounts, for the destination picker. */
     private var directoryAccounts by mutableStateOf(listOf<DirectoryAccountEntity>().toImmutableList())
 
-    /** Incoming transfers awaiting her confirmation. Empty for a sender-only user. */
-    private var pendingTransfers by mutableStateOf(
-        listOf<PendingTransferEntity>().toImmutableList()
-    )
-
     /**
      * Loads the accounts published by other profiles, then refreshes them.
      *
@@ -177,81 +168,6 @@ class EditTransactionViewModel @Inject constructor(
             }
         }
     }
-
-    /**
-     * Loads incoming transfers still waiting on her.
-     *
-     * Failure is swallowed for the same reason the directory refresh is: sync is
-     * a background nicety, and a failure to fetch it must not stop her recording a
-     * transaction she has already made. A missed fetch is recovered by the next
-     * sync; a crashed screen is not.
-     */
-    fun loadPendingTransfers() {
-        viewModelScope.launch {
-            pendingTransfers = runCatching {
-                pendingTransferRepository.pending().toImmutableList()
-            }.getOrElse { error ->
-                Timber.e(error, "Could not load pending transfers")
-                pendingTransfers
-            }
-        }
-    }
-
-    /**
-     * She confirmed an incoming transfer: it becomes a real TRANSFER in her ledger.
-     *
-     * Failure is logged and swallowed rather than surfaced. The decision is
-     * idempotent server-side and guarded locally, so a retry is safe, and losing
-     * the item to a transient exception would be worse than a visible delay.
-     */
-    private fun onPendingTransferAccepted(entry: PendingTransferEntity) {
-        viewModelScope.launch {
-            runCatching {
-                pendingTransferRepository.decide(
-                    correlationId = entry.correlationId,
-                    action = TransferInbox.Action.ACCEPT,
-                    confirmedLegId = UUID.randomUUID(),
-                    senderAccountId = senderAccountId(entry),
-                )
-            }.onFailure { Timber.e(it, "Could not confirm transfer ${entry.correlationId}") }
-            pendingTransfers = pendingTransferRepository.pending().toImmutableList()
-        }
-    }
-
-    /**
-     * She declined: the item is tombstoned and her ledger is left alone.
-     *
-     * The sender's row is deliberately NOT retracted. The money already moved, and
-     * deleting it from her side would make her ledger disagree with reality.
-     */
-    private fun onPendingTransferDeclined(entry: PendingTransferEntity) {
-        viewModelScope.launch {
-            runCatching {
-                pendingTransferRepository.decide(
-                    correlationId = entry.correlationId,
-                    action = TransferInbox.Action.DECLINE,
-                    // Unused on the decline path: declining never writes a ledger
-                    // row, so this id is never consulted.
-                    confirmedLegId = UUID.randomUUID(),
-                    senderAccountId = senderAccountId(entry),
-                )
-            }.onFailure { Timber.e(it, "Could not decline transfer ${entry.correlationId}") }
-            pendingTransfers = pendingTransferRepository.pending().toImmutableList()
-        }
-    }
-
-    /**
-     * The counterparty's account id for a mirrored transfer.
-     *
-     * Her account genuinely does not exist in this database, so this cannot be
-     * looked up - it is carried only so the confirmed leg has something to name
-     * and stays joinable with the sender's row. Derived from the correlation id
-     * rather than randomised, so re-deciding the same transfer names the same
-     * account instead of inventing a second identity on each attempt.
-     */
-    private fun senderAccountId(entry: PendingTransferEntity): UUID = UUID.nameUUIDFromBytes(
-        "pending-transfer-sender:${entry.correlationId}".toByteArray()
-    )
 
     private var category by mutableStateOf<Category?>(null)
     private var amount by mutableDoubleStateOf(0.0)
@@ -309,7 +225,6 @@ class EditTransactionViewModel @Inject constructor(
                 toAmount = BigDecimal.ZERO
             )
 
-            loadPendingTransfers()
             tags = tagList.await()
             transactionAssociatedTags =
                 tagRepository.findByAssociatedId(AssociationId(loadedTransaction().id)).map(Tag::id)
@@ -342,7 +257,6 @@ class EditTransactionViewModel @Inject constructor(
             transactionAssociatedTags = getTransactionAssociatedTags(),
             directoryAccounts = directoryAccounts,
             toDirectoryAccount = toDirectoryAccount,
-            pendingTransfers = pendingTransfers,
         )
     }
 
@@ -472,10 +386,6 @@ class EditTransactionViewModel @Inject constructor(
                 onToDirectoryAccountChanged(event.entry)
             EditTransactionViewEvent.OnClearDirectoryDestination ->
                 onClearDirectoryDestination()
-            is EditTransactionViewEvent.OnPendingTransferAccepted ->
-                onPendingTransferAccepted(event.entry)
-            is EditTransactionViewEvent.OnPendingTransferDeclined ->
-                onPendingTransferDeclined(event.entry)
             is EditTransactionViewEvent.Save -> save(event.closeScreen)
             is EditTransactionViewEvent.SetHasChanges -> setHasChanges(event.hasChangesValue)
             is EditTransactionViewEvent.UpdateExchangeRate -> updateExchangeRate(event.exRate)

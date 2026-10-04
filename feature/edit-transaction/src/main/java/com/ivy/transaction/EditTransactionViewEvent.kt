@@ -3,7 +3,6 @@ package com.ivy.transaction
 import androidx.compose.runtime.Immutable
 import com.ivy.base.model.TransactionType
 import com.ivy.data.db.entity.DirectoryAccountEntity
-import com.ivy.data.db.entity.PendingTransferEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.Tag
 import com.ivy.data.model.TagId
@@ -51,13 +50,6 @@ data class EditTransactionViewState(
      * account into a list the rest of the screen assumes it owns.
      */
     val toDirectoryAccount: DirectoryAccountEntity?,
-    /**
-     * Incoming transfers waiting for her to accept or decline.
-     *
-     * Empty on the owner's own device unless someone has sent to her, so this
-     * costs nothing for a user who only ever sends.
-     */
-    val pendingTransfers: ImmutableList<PendingTransferEntity>,
 )
 
 sealed interface EditTransactionViewEvent {
@@ -69,10 +61,6 @@ sealed interface EditTransactionViewEvent {
     data class OnToAccountChanged(val newAccount: Account) : EditTransactionViewEvent
     data class OnToDirectoryAccountChanged(val entry: DirectoryAccountEntity) : EditTransactionViewEvent
     data object OnClearDirectoryDestination : EditTransactionViewEvent
-    /** She confirmed an incoming transfer. Writes a real TRANSFER row. */
-    data class OnPendingTransferAccepted(val entry: PendingTransferEntity) : EditTransactionViewEvent
-    /** She declined. Tombstones the item; her ledger is left untouched. */
-    data class OnPendingTransferDeclined(val entry: PendingTransferEntity) : EditTransactionViewEvent
     data class OnDueDateChanged(val newDueDate: LocalDateTime?) : EditTransactionViewEvent
     data object OnChangeDate : EditTransactionViewEvent
     data object OnChangeTime : EditTransactionViewEvent

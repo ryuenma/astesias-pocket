@@ -26,6 +26,7 @@ import com.ivy.domain.RootScreen
 import com.ivy.domain.usecase.csv.ExportCsvUseCase
 import com.ivy.domain.usecase.xlsx.ExportXlsxUseCase
 import com.ivy.domain.usecase.exchange.SyncExchangeRatesUseCase
+import com.ivy.domain.usecase.transfer.PendingTransferRepository
 import com.ivy.frp.monad.Res
 import com.ivy.legacy.IvyWalletCtx
 import com.ivy.legacy.LogoutLogic
@@ -57,6 +58,7 @@ class SettingsViewModel @Inject constructor(
     private val logoutLogic: LogoutLogic,
     private val sharedPrefs: SharedPrefs,
     private val syncConfig: SyncConfig,
+    private val pendingTransferRepository: PendingTransferRepository,
     private val backupDataUseCase: BackupDataUseCase,
     private val startDayOfMonthAct: StartDayOfMonthAct,
     private val updateStartDayOfMonthAct: UpdateStartDayOfMonthAct,
@@ -86,6 +88,9 @@ class SettingsViewModel @Inject constructor(
     private val requestingNotificationPermission = mutableStateOf(false)
     private val notificationsPermanentlyDenied = mutableStateOf(false)
 
+    /** Incoming transfers awaiting her decision. Drives the Settings row badge. */
+    private val pendingTransfersCount = mutableIntStateOf(0)
+
     @Composable
     override fun uiState(): SettingsState {
         LaunchedEffect(Unit) {
@@ -108,6 +113,7 @@ class SettingsViewModel @Inject constructor(
             syncProfile = syncConfig.profileId,
             notificationsBlocked = getNotificationsBlocked(),
             notificationsPermanentlyDenied = getNotificationsPermanentlyDenied(),
+            pendingTransfersCount = pendingTransfersCount.value,
         )
     }
 
@@ -121,6 +127,24 @@ class SettingsViewModel @Inject constructor(
         initializeHideIncome()
         initializeTransfersAsIncomeExpense()
         initializeStartDateOfMonth()
+        refreshPendingTransfersCount()
+    }
+
+    /**
+     * Counts what is waiting in the inbox.
+     *
+     * Read fresh on every entry to Settings rather than cached, because the count
+     * exists to tell her money has arrived: a stale zero is worse than no row at
+     * all. Failure is swallowed for the same reason the rest of the sync reads
+     * are - a missing count must not take the settings screen down with it.
+     */
+    private suspend fun refreshPendingTransfersCount() {
+        pendingTransfersCount.intValue = runCatching {
+            pendingTransferRepository.pending().size
+        }.getOrElse { error ->
+            Timber.e(error, "Could not count pending transfers")
+            pendingTransfersCount.intValue
+        }
     }
 
     private suspend fun initializeCurrency() {
@@ -484,9 +508,19 @@ class SettingsViewModel @Inject constructor(
             return
         }
 
+        showNotifications.value = true
+
         viewModelScope.launch {
             sharedPrefs.putBoolean(SharedPrefs.SHOW_NOTIFICATIONS, true)
             scheduleReminderIfAllowed()
+
+            // The state write above is deliberately outside this launch, and is
+            // what the false branch has always done. Only the false branch used
+            // to touch the field at all, so this switch was a one-way latch: it
+            // turned off and could never be turned back on until the process was
+            // restarted and the pref re-read. The state field and the pref are two
+            // records of the same choice and must be written in both directions,
+            // in the same order, or the switch lies until the next cold start.
 
             // Below API 33 the permission does not exist, so nothing is asked for
             // and the switch is simply true. Guarded here rather than in the

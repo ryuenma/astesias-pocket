@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import com.ivy.base.legacy.Theme
 import com.ivy.base.model.TransactionType
 import com.ivy.data.db.entity.DirectoryAccountEntity
-import com.ivy.data.db.entity.PendingTransferEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.Tag
 import com.ivy.data.model.TagId
@@ -76,7 +75,6 @@ import com.ivy.wallet.ui.theme.modal.ModalCheck
 import com.ivy.wallet.ui.theme.modal.ModalSave
 import com.ivy.wallet.ui.theme.modal.ProgressModal
 import com.ivy.transaction.directory.DirectoryAccountPicker
-import com.ivy.transaction.pending.PendingTransfersModal
 import com.ivy.wallet.ui.theme.modal.edit.AccountModal
 import com.ivy.wallet.ui.theme.modal.edit.AccountModalData
 import com.ivy.wallet.ui.theme.modal.edit.AmountModal
@@ -130,13 +128,6 @@ fun BoxWithConstraintsScope.EditTransactionScreen(screen: EditTransactionScreen)
         },
         onDirectorySelected = {
             viewModel.onEvent(EditTransactionViewEvent.OnToDirectoryAccountChanged(it))
-        },
-        pendingTransfers = uiState.pendingTransfers,
-        onPendingTransferAccepted = {
-            viewModel.onEvent(EditTransactionViewEvent.OnPendingTransferAccepted(it))
-        },
-        onPendingTransferDeclined = {
-            viewModel.onEvent(EditTransactionViewEvent.OnPendingTransferDeclined(it))
         },
         dueDate = uiState.dueDate,
         amount = uiState.amount,
@@ -230,9 +221,6 @@ private fun BoxWithConstraintsScope.UI(
     directoryAccounts: ImmutableList<DirectoryAccountEntity>,
     onClearDirectoryDestination: () -> Unit,
     onDirectorySelected: (DirectoryAccountEntity) -> Unit,
-    pendingTransfers: ImmutableList<PendingTransferEntity>,
-    onPendingTransferAccepted: (PendingTransferEntity) -> Unit,
-    onPendingTransferDeclined: (PendingTransferEntity) -> Unit,
 
     customExchangeRateState: CustomExchangeRateState,
     categories: ImmutableList<Category>,
@@ -269,7 +257,6 @@ private fun BoxWithConstraintsScope.UI(
     var categoryModalData: CategoryModalData? by remember { mutableStateOf(null) }
     var accountModalData: AccountModalData? by remember { mutableStateOf(null) }
     var directoryPickerVisible by remember { mutableStateOf(false) }
-    var pendingTransfersVisible by remember { mutableStateOf(false) }
     var descriptionModalVisible by remember { mutableStateOf(false) }
     var deleteTrnModalVisible by remember { mutableStateOf(false) }
     var changeTransactionTypeModalVisible by remember { mutableStateOf(false) }
@@ -583,19 +570,10 @@ private fun BoxWithConstraintsScope.UI(
         onDismiss = { directoryPickerVisible = false },
     )
 
-    PendingTransfersModal(
-        visible = pendingTransfersVisible,
-        items = pendingTransfers,
-        onAccept = { entry ->
-            onPendingTransferAccepted(entry)
-            pendingTransfersVisible = false
-        },
-        onDecline = { entry ->
-            onPendingTransferDeclined(entry)
-            pendingTransfersVisible = false
-        },
-        onDismiss = { pendingTransfersVisible = false },
-    )
+    // The pending-transfer inbox is deliberately NOT here. It used to be, behind
+    // a flag nothing ever set, which made ~200 lines of modal, a state machine,
+    // a DAO and an entity unreachable from the running app. It now has its own
+    // destination - PendingTransfersScreen - reached from Settings.
 
     AccountModal(
         modal = accountModalData,
@@ -761,11 +739,6 @@ private fun BoxWithConstraintsScope.Preview(isDark: Boolean = false) {
             directoryAccounts = persistentListOf(),
             onClearDirectoryDestination = {},
             onDirectorySelected = {},
-            // Empty in the preview: a pending item is a live claim from another
-            // device, so inventing one here would show a state that has not happened.
-            pendingTransfers = persistentListOf(),
-            onPendingTransferAccepted = {},
-            onPendingTransferDeclined = {},
         )
     }
 }

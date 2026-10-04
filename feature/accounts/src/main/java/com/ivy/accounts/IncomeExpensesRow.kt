@@ -14,12 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
 import com.ivy.ui.R
-import com.ivy.wallet.ui.theme.wallet.AmountCurrencyB1
+import com.ivy.legacy.utils.format
 
 @Composable
 fun IncomeExpensesRow(
@@ -112,10 +113,34 @@ private fun LabelAmountColumn(
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AmountCurrencyB1(
-                textColor = textColor,
-                amount = amount,
-                currency = currency
+            // Laid out here rather than delegated to AmountCurrencyB1, because making
+            // the amount yield width needs RowScope and this is a Row. The summary row
+            // measures its two columns against the full screen width, so with a large
+            // IDR figure the right-hand column ran out of room and the currency code
+            // wrapped into a vertical "ID"/"R" stack flush to the screen edge.
+            // weight(fill = false) means the figure keeps its natural width unless it
+            // truly cannot fit, so the common case renders exactly as before and the
+            // code keeps its letters.
+            Text(
+                modifier = Modifier.weight(1f, fill = false),
+                text = amount.format(currency),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = UI.typo.nB1.style(
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+            )
+
+            Spacer(Modifier.width(4.dp))
+
+            Text(
+                text = currency,
+                maxLines = 1,
+                style = UI.typo.nB1.style(
+                    fontWeight = FontWeight.Normal,
+                    color = textColor
+                )
             )
         }
     }

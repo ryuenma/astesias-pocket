@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -372,10 +373,20 @@ private fun CurrencyItemCard(
             )
         )
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(16.dp))
 
+        // Not `currency.name.take(20)`. Truncating in code is not ellipsizing:
+        // it cut mid-word and left "Angolan New Kwanza (" on screen with no
+        // indication that anything was missing, while 85-140px of card sat empty
+        // to its right. A weighted, single-line Text lets Compose lay out what
+        // fits and mark the rest, so the row is honest about its own width instead
+        // of silently discarding characters.
         Text(
-            text = currency.name.take(20),
+            modifier = Modifier.weight(1f),
+            text = currency.name,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End,
             style = UI.typo.b2.style(
                 color = if (selected) White else UI.colors.pureInverse,
                 fontWeight = FontWeight.SemiBold

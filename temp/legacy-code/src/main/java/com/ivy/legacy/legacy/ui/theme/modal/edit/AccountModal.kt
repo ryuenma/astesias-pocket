@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -26,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ivy.design.l0_system.UI
@@ -341,6 +344,7 @@ private fun typeOf(iconName: String?): AccountType? = iconName?.let {
  * for the owner or the choice would not mean anything.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun AccountTypeRow(
     selected: AccountType?,
     onSelect: (AccountType) -> Unit
@@ -356,7 +360,19 @@ private fun AccountTypeRow(
 
         Spacer(Modifier.height(12.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // FlowRow, not Row: with three chips of unequal intrinsic width sharing one
+        // line, the last one is squeezed to whatever is left and its label breaks
+        // to one character per line. In Indonesian account_type_savings is
+        // "Rekening Deposito" (22 chars), which is worse than the English
+        // "Savings". FlowRow lets each chip take its natural width and simply
+        // move to the next line instead - so the layout is correct whatever the
+        // translation says, rather than correct only for the string it was
+        // measured against.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.testTag("account_type_row")
+        ) {
             AccountType.entries.forEach { type ->
                 AccountTypeChip(
                     type = type,
@@ -410,7 +426,12 @@ private fun AccountTypeChip(
         Spacer(Modifier.width(8.dp))
 
         Text(
+            // Belt and braces on top of the FlowRow: if a translation is ever long
+            // enough that even a full row cannot hold it, ellipsize rather than
+            // breaking the label into a vertical stack of single characters.
             text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             style = UI.typo.b2.style(
                 color = if (selected) Ivy.dynamicContrast() else UI.colors.pureInverse,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium

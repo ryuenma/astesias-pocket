@@ -355,9 +355,9 @@ private fun CategoryButton(
                     .testTag("choose_category_expand_button"),
                 painter = painterResource(id = R.drawable.ic_expand_more),
                 contentDescription = if (expanded) {
-                    "collapse ${category.name.value}"
+                    stringResource(R.string.collapse_category, category.name.value)
                 } else {
-                    "expand ${category.name.value}"
+                    stringResource(R.string.expand_category, category.name.value)
                 },
                 tint = if (selected) {
                     findContrastTextColor(categoryColor)
