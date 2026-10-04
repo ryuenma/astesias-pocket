@@ -28,6 +28,9 @@ import com.ivy.navigation.Navigation
 import com.ivy.ui.ComposeViewModel
 import com.ivy.wallet.domain.action.account.AccountsAct
 import com.ivy.wallet.domain.deprecated.logic.CategoryCreator
+import com.ivy.domain.usecase.billreminder.BillReminderDates
+import com.ivy.domain.usecase.billreminder.BillReminderInbox
+import com.ivy.legacy.notification.BillReminderScheduler
 import com.ivy.wallet.domain.deprecated.logic.PlannedPaymentsGenerator
 import com.ivy.wallet.domain.deprecated.logic.model.CreateAccountData
 import com.ivy.wallet.domain.deprecated.logic.model.CreateCategoryData
@@ -51,6 +54,8 @@ class EditPlannedViewModel @Inject constructor(
     private val nav: Navigation,
     private val plannedPaymentRuleDao: PlannedPaymentRuleDao,
     private val plannedPaymentsGenerator: PlannedPaymentsGenerator,
+    private val billReminderScheduler: BillReminderScheduler,
+    private val billReminderInbox: BillReminderInbox,
     private val categoryCreator: CategoryCreator,
     private val accountCreator: AccountCreator,
     private val accountsAct: AccountsAct,
@@ -64,6 +69,7 @@ class EditPlannedViewModel @Inject constructor(
     private var intervalN by mutableStateOf<Int?>(null)
     private var intervalType by mutableStateOf<IntervalType?>(null)
     private var oneTime by mutableStateOf(false)
+    private var dueDayOfMonth by mutableStateOf<Int?>(null)
     private var initialTitle by mutableStateOf<String?>(null)
     private var description by mutableStateOf<String?>(null)
     private var account by mutableStateOf<Account?>(null)
@@ -95,6 +101,7 @@ class EditPlannedViewModel @Inject constructor(
             startDate = getStartDate(),
             intervalN = getIntervalN(),
             oneTime = getOneTime(),
+            dueDayOfMonth = getDueDayOfMonth(),
             account = getAccount(),
             category = getCategory(),
             amount = getAmount(),
@@ -150,6 +157,11 @@ class EditPlannedViewModel @Inject constructor(
     @Composable
     private fun getOneTime(): Boolean {
         return oneTime
+    }
+
+    @Composable
+    private fun getDueDayOfMonth(): Int? {
+        return dueDayOfMonth
     }
 
     @Composable
@@ -235,6 +247,26 @@ class EditPlannedViewModel @Inject constructor(
             is EditPlannedScreenEvent.OnRuleChanged ->
                 updateRule(event.startDate, event.oneTime, event.intervalN, event.intervalType)
 
+            // Deliberately only updates the form field.
+            //
+            // Changing the day changes what happens NEXT month, and says nothing
+            // about a bill already fabricated for this month. Deliberately NOT:
+            //
+            //  - deleting the pending row, which would erase a bill the owner can
+            //    see and may have already adjusted the amount on;
+            //  - re-creating it under the new day, which would give him two rows
+            //    for one bill and contradict "editing must not duplicate".
+            //
+            // A bill already on screen keeps its own due date and its own amount.
+            // If the owner wants this month's bill gone he dismisses it, which is
+            // an explicit action with a visible result; silently changing the
+            // schedule must not quietly change what he currently owes.
+            //
+            // The new day takes effect for the following occurrence because
+            // `save` re-arms the reminder from the rule's current day.
+            is EditPlannedScreenEvent.OnDueDayOfMonthChanged ->
+                dueDayOfMonth = event.dueDayOfMonth
+
             is EditPlannedScreenEvent.OnCategoryChanged -> updateCategory(event.newCategory)
             is EditPlannedScreenEvent.OnEditCategory -> editCategory(event.updatedCategory)
             is EditPlannedScreenEvent.OnCategoryModalVisible ->
@@ -305,6 +337,9 @@ class EditPlannedViewModel @Inject constructor(
         intervalN = rule.intervalN
         oneTime = rule.oneTime
         intervalType = rule.intervalType
+        // Round-tripped so editing a bill shows the day it is already reminded on,
+        // and null for a rule that has never been given one.
+        dueDayOfMonth = rule.dueDayOfMonth
         initialTitle = rule.title
         description = rule.description
         val selectedAccount = ioThread { accountDao.findById(rule.accountId)!!.toLegacyDomain() }
@@ -426,12 +461,30 @@ class EditPlannedViewModel @Inject constructor(
                         title = title?.trim(),
                         description = description?.trim(),
                         amount = amount ?: error("no amount"),
+                        // Null is a valid saved value: it means "no monthly
+                        // reminder", which is what every rule that has not been
+                        // given a day already means.
+                        dueDayOfMonth = dueDayOfMonth,
 
                         isSynced = false
                     )
 
                     plannedPaymentRuleWriter.save(loadedRule().toEntity())
                     plannedPaymentsGenerator.generate(loadedRule())
+
+                    // Arm, re-arm or cancel the reminder to match what was just
+                    // saved. Done here rather than only at app start so changing
+                    // a bill's day takes effect immediately instead of after a
+                    // restart, and clearing the day takes the reminder away rather
+                    // than leaving an armed request to fire for a rule that no
+                    // longer wants one.
+                    val saved = loadedRule()
+                    val savedDay = saved.dueDayOfMonth
+                    if (savedDay != null && BillReminderDates.isValidDayOfMonth(savedDay)) {
+                        billReminderScheduler.schedule(saved.id, savedDay)
+                    } else {
+                        billReminderScheduler.cancel(saved.id)
+                    }
                 }
 
                 if (closeScreen) {
@@ -475,6 +528,12 @@ class EditPlannedViewModel @Inject constructor(
                     transactionRepository.deletedByRecurringRuleIdAndNoDateTime(
                         recurringRuleId = it.id
                     )
+                    // Without this the armed request survives the rule it was
+                    // armed for and fires on a deleted bill.
+                    billReminderScheduler.cancel(it.id)
+                    // The pending bills for this rule go with it, tombstones
+                    // included: nothing will ever read them again.
+                    billReminderInbox.deleteAllForRule(it.id)
                 }
                 nav.back()
             }

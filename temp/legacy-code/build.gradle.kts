@@ -24,4 +24,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
 
     testImplementation(libs.bundles.testing)
+    // TestListenableWorkerBuilder, so the reminder worker's input data and
+    // run can be exercised on the JVM instead of only on a device.
+    testImplementation(libs.androidx.work.testing)
 }

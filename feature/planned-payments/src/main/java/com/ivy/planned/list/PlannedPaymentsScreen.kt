@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ivy.base.model.TransactionType
+import com.ivy.data.db.entity.PendingBillEntity
 import com.ivy.data.model.Category
 import com.ivy.data.model.CategoryId
 import com.ivy.data.model.IntervalType
@@ -34,6 +35,7 @@ import com.ivy.ui.rememberScrollPositionListState
 import com.ivy.wallet.ui.theme.Green
 import com.ivy.wallet.ui.theme.Orange
 import kotlinx.collections.immutable.persistentListOf
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
 
@@ -79,6 +81,14 @@ private fun BoxWithConstraintsScope.UI(
         recurringExpenses = state.recurringExpenses,
         oneTimeExpanded = state.isOneTimePaymentsExpanded,
         recurringExpanded = state.isRecurringPaymentsExpanded,
+        pendingBills = state.pendingBills,
+        zone = state.zone,
+        onPendingBillAmountChanged = { key, amount ->
+            onEvent(PlannedPaymentsScreenEvent.OnPendingBillAmountChanged(key, amount))
+        },
+        onPendingBillDismissed = { key ->
+            onEvent(PlannedPaymentsScreenEvent.OnPendingBillDismissed(key))
+        },
         setOneTimeExpanded = {
             onEvent(PlannedPaymentsScreenEvent.OnOneTimePaymentsExpanded(it))
         },
@@ -160,7 +170,23 @@ private fun Preview() {
                 recurringExpenses = 1025.5,
                 recurringIncome = 0.0,
                 isOneTimePaymentsExpanded = true,
-                isRecurringPaymentsExpanded = true
+                isRecurringPaymentsExpanded = true,
+                // A pending bill in the preview, so the UNPAID treatment is
+                // visible in the design review rather than only on a device.
+                pendingBills = persistentListOf(
+                    PendingBillEntity(
+                        occurrenceKey = "reminder:[preview]:[2027-01]",
+                        ruleId = "preview",
+                        dueOn = timeNowUTC().toInstant(ZoneOffset.UTC).toEpochMilli(),
+                        amount = 750_000.0,
+                        title = "Internet",
+                        description = null,
+                        accountId = "preview",
+                        type = TransactionType.EXPENSE,
+                        state = PendingBillEntity.STATE_PENDING,
+                    ),
+                ),
+                zone = ZoneId.systemDefault(),
             )
         )
     }

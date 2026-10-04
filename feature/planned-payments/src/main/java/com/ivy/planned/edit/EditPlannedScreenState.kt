@@ -19,6 +19,8 @@ data class EditPlannedScreenState(
     val intervalN: Int?,
     val intervalType: IntervalType?,
     val oneTime: Boolean,
+    /** Day of the month to remind on, 1..31; null means no monthly reminder. */
+    val dueDayOfMonth: Int?,
     val initialTitle: String?,
     val description: String?,
     val categories: ImmutableList<Category>,

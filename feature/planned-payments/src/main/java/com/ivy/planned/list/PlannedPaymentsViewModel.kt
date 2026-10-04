@@ -8,13 +8,16 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
+import com.ivy.base.time.TimeProvider
 import com.ivy.data.db.dao.read.SettingsDao
-import com.ivy.ui.ComposeViewModel
+import com.ivy.data.db.entity.PendingBillEntity
 import com.ivy.data.model.Category
 import com.ivy.data.repository.CategoryRepository
+import com.ivy.domain.usecase.billreminder.BillReminderInbox
 import com.ivy.legacy.datamodel.Account
 import com.ivy.legacy.datamodel.PlannedPaymentRule
 import com.ivy.legacy.utils.ioThread
+import com.ivy.ui.ComposeViewModel
 import com.ivy.wallet.domain.action.account.AccountsAct
 import com.ivy.wallet.domain.deprecated.logic.PlannedPaymentsLogic
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,7 +33,9 @@ class PlannedPaymentsViewModel @Inject constructor(
     private val settingsDao: SettingsDao,
     private val plannedPaymentsLogic: PlannedPaymentsLogic,
     private val categoriesRepository: CategoryRepository,
-    private val accountsAct: AccountsAct
+    private val accountsAct: AccountsAct,
+    private val billReminderInbox: BillReminderInbox,
+    private val timeProvider: TimeProvider,
 ) : ComposeViewModel<PlannedPaymentsScreenState, PlannedPaymentsScreenEvent>() {
 
     private var currency by mutableStateOf("")
@@ -44,6 +49,7 @@ class PlannedPaymentsViewModel @Inject constructor(
     private var oneTimeExpenses by mutableDoubleStateOf(0.0)
     private var recurringIncome by mutableDoubleStateOf(0.0)
     private var recurringExpenses by mutableDoubleStateOf(0.0)
+    private var pendingBills by mutableStateOf<ImmutableList<PendingBillEntity>>(persistentListOf())
     private var isOneTimePaymentsExpanded by mutableStateOf(true)
     private var isRecurringPaymentsExpanded by mutableStateOf(true)
 
@@ -64,7 +70,9 @@ class PlannedPaymentsViewModel @Inject constructor(
             recurringPlannedPayment = getRecurringPlannedPayment(),
             oneTimePlannedPayment = getOneTimePlannedPayment(),
             isOneTimePaymentsExpanded = getOneTimePaymentsExpanded(),
-            isRecurringPaymentsExpanded = getRecurringPaymentsExpanded()
+            isRecurringPaymentsExpanded = getRecurringPaymentsExpanded(),
+            pendingBills = getPendingBills(),
+            zone = timeProvider.getZoneId()
         )
     }
 
@@ -119,6 +127,11 @@ class PlannedPaymentsViewModel @Inject constructor(
     }
 
     @Composable
+    private fun getPendingBills(): ImmutableList<PendingBillEntity> {
+        return pendingBills
+    }
+
+    @Composable
     private fun getOneTimePaymentsExpanded(): Boolean {
         return isOneTimePaymentsExpanded
     }
@@ -131,6 +144,42 @@ class PlannedPaymentsViewModel @Inject constructor(
             is PlannedPaymentsScreenEvent.OnRecurringPaymentsExpanded -> {
                 isRecurringPaymentsExpanded = event.isExpanded
             }
+
+            is PlannedPaymentsScreenEvent.OnPendingBillAmountChanged -> {
+                adjustPendingBillAmount(event.occurrenceKey, event.amount)
+            }
+
+            is PlannedPaymentsScreenEvent.OnPendingBillDismissed -> {
+                dismissPendingBill(event.occurrenceKey)
+            }
+        }
+    }
+
+    /**
+     * Adjusts a pending bill's amount in place.
+     *
+     * An UPDATE scoped by the occurrence key, never an insert, so adjusting a bill
+     * cannot duplicate it. The rule that produced the bill is untouched: this
+     * correction applies to this month only, and next month's reminder still uses
+     * the rule's figure for the owner to check again.
+     */
+    private fun adjustPendingBillAmount(occurrenceKey: String, amount: Double) {
+        viewModelScope.launch {
+            ioThread { billReminderInbox.adjustAmount(occurrenceKey, amount) }
+            pendingBills = ioThread { billReminderInbox.pendingBills() }.toImmutableList()
+        }
+    }
+
+    /**
+     * Discards a pending bill without paying it.
+     *
+     * Leaves a DISMISSED tombstone rather than deleting the row, so a replayed
+     * reminder for the same month cannot bring the bill back.
+     */
+    private fun dismissPendingBill(occurrenceKey: String) {
+        viewModelScope.launch {
+            ioThread { billReminderInbox.dismiss(occurrenceKey) }
+            pendingBills = ioThread { billReminderInbox.pendingBills() }.toImmutableList()
         }
     }
 
@@ -151,6 +200,11 @@ class PlannedPaymentsViewModel @Inject constructor(
                 ioThread { plannedPaymentsLogic.recurring() }.toImmutableList()
             recurringIncome = ioThread { plannedPaymentsLogic.recurringIncome() }
             recurringExpenses = ioThread { plannedPaymentsLogic.recurringExpenses() }
+
+            // Reloaded with the rest so a bill fabricated while the app was
+            // closed appears here on the next open rather than needing a
+            // separate refresh path.
+            pendingBills = ioThread { billReminderInbox.pendingBills() }.toImmutableList()
         }
     }
 }

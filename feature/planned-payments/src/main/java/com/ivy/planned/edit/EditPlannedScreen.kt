@@ -186,6 +186,23 @@ private fun BoxWithConstraintsScope.UI(
 
         Spacer(Modifier.height(12.dp))
 
+        // Only for recurring rules: a one-time payment has a date of its own and
+        // no monthly day to be reminded on.
+        BillReminderDayPicker(
+            dueDayOfMonth = state.dueDayOfMonth,
+            enabled = !state.oneTime && hasRecurringRule(
+                startDate = state.startDate,
+                intervalN = state.intervalN,
+                intervalType = state.intervalType,
+                oneTime = state.oneTime,
+            ),
+            onDueDayOfMonthChanged = {
+                onEvent(EditPlannedScreenEvent.OnDueDayOfMonthChanged(it))
+            },
+        )
+
+        Spacer(Modifier.height(12.dp))
+
         Description(
             description = state.description,
             onAddDescription = { onEvent(EditPlannedScreenEvent.OnDescriptionModalVisible(true)) },
@@ -431,6 +448,7 @@ private fun Preview() {
             screen = EditPlannedScreen(null, TransactionType.EXPENSE),
             EditPlannedScreenState(
                 oneTime = false,
+                dueDayOfMonth = null,
                 startDate = null,
                 intervalN = null,
                 intervalType = null,

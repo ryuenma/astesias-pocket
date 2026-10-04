@@ -26,4 +26,19 @@ interface PlannedPaymentRuleDao {
 
     @Query("SELECT COUNT(*) FROM planned_payment_rules WHERE isDeleted = 0 ")
     suspend fun countPlannedPayments(): Long
+
+    /**
+     * Rules that have opted into a monthly reminder.
+     *
+     * `dueDayOfMonth IS NOT NULL` is the whole filter, and it means exactly "has a
+     * day set" - the nullable column was added so that every pre-existing rule
+     * reads as not having one. No backfill, so no rule starts reminding anyone
+     * because of this migration.
+     */
+    @Query(
+        "SELECT * FROM planned_payment_rules " +
+            "WHERE isDeleted = 0 AND dueDayOfMonth IS NOT NULL " +
+            "ORDER BY dueDayOfMonth ASC"
+    )
+    suspend fun findAllWithBillReminder(): List<PlannedPaymentRuleEntity>
 }

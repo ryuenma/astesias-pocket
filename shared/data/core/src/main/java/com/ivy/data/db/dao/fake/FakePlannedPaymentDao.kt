@@ -33,6 +33,16 @@ class FakePlannedPaymentDao : PlannedPaymentRuleDao, WritePlannedPaymentRuleDao 
         TODO("Not yet implemented")
     }
 
+    /**
+     * Mirrors the SQL filter: a rule has a reminder only when its day is set.
+     *
+     * Implemented rather than `TODO` because the scheduler reads this to decide
+     * what to arm, and a fake that threw there would make any test touching the
+     * scheduler fail for a reason unrelated to what it is testing.
+     */
+    override suspend fun findAllWithBillReminder(): List<PlannedPaymentRuleEntity> =
+        items.filter { !it.isDeleted && it.dueDayOfMonth != null }
+
     override suspend fun save(value: PlannedPaymentRuleEntity) {
         items.add(value)
     }

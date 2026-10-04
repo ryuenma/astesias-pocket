@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ivy.data.db.entity.PendingBillEntity
 import com.ivy.data.model.Category
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
@@ -35,6 +36,7 @@ import com.ivy.ui.R
 import com.ivy.wallet.ui.theme.Gray
 import com.ivy.wallet.ui.theme.components.IvyIcon
 import kotlinx.collections.immutable.ImmutableList
+import java.time.ZoneId
 import kotlin.math.absoluteValue
 
 @Suppress("LongParameterList")
@@ -54,6 +56,10 @@ fun PlannedPaymentsLazyColumn(
     recurringExpanded: Boolean,
     setOneTimeExpanded: (Boolean) -> Unit,
     setRecurringExpanded: (Boolean) -> Unit,
+    pendingBills: List<PendingBillEntity>,
+    zone: ZoneId,
+    onPendingBillAmountChanged: (String, Double) -> Unit,
+    onPendingBillDismissed: (String) -> Unit,
     listState: LazyListState = rememberLazyListState(),
 ) {
     val nav = navigation()
@@ -87,6 +93,18 @@ fun PlannedPaymentsLazyColumn(
             recurringExpenses = recurringExpenses,
             recurringExpanded = recurringExpanded,
             setRecurringExpanded = setRecurringExpanded
+        )
+
+        // Above the rules: a bill that is waiting to be paid is more urgent
+        // information than the schedule that produced it.
+        pendingBillItems(
+            bills = pendingBills,
+            currency = currency,
+            zone = zone,
+            onAdjustAmount = { bill ->
+                onPendingBillAmountChanged(bill.occurrenceKey, bill.amount)
+            },
+            onDismiss = { bill -> onPendingBillDismissed(bill.occurrenceKey) },
         )
     }
 }

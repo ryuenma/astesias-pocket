@@ -19,6 +19,7 @@ import com.ivy.navigation.MainScreen
 import com.ivy.navigation.Navigation
 import com.ivy.navigation.OnboardingScreen
 import com.ivy.ui.R
+import com.ivy.legacy.notification.BillReminderScheduler
 import com.ivy.wallet.domain.deprecated.logic.notification.TransactionReminderLogic
 import com.ivy.wallet.migrations.MigrationsManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +41,7 @@ class RootViewModel @Inject constructor(
     private val settingsDao: SettingsDao,
     private val sharedPrefs: SharedPrefs,
     private val transactionReminderLogic: TransactionReminderLogic,
+    private val billReminderScheduler: BillReminderScheduler,
     private val migrationsManager: MigrationsManager,
     private val legalRepo: LegalRepository,
 ) : ViewModel() {
@@ -99,6 +101,33 @@ class RootViewModel @Inject constructor(
         if (!handleSpecialStart(intent)) {
             nav.navigateTo(MainScreen)
             transactionReminderLogic.scheduleReminder()
+            scheduleBillReminders()
+        }
+    }
+
+    /**
+     * Re-arms every bill reminder on each app start.
+     *
+     * Deliberately unconditional and idempotent rather than gated on the
+     * notifications pref. Two reasons:
+     *
+     *  - It is re-armed on every start, so it is the repair path. A request lost to
+     *    a reboot, an app update or a "clear all data" in system settings is
+     *    re-created here rather than needing its own recovery code. Each rule is
+     *    enqueued as unique work with REPLACE, so re-arming cannot stack duplicates.
+     *  - The pending bill is written whether or not the notification can be posted.
+     *    Tying the schedule to the pref would mean that with notifications off, no
+     *    pending bill ever appears either - and the bill is the part the owner
+     *    needs. Suppression belongs at the moment of posting, which is where
+     *    `NotificationService` already enforces it.
+     */
+    private fun scheduleBillReminders() {
+        viewModelScope.launch {
+            // Deferred to IO: this reads the rules table and enqueues into
+            // WorkManager, which touches its own database.
+            ioThread {
+                billReminderScheduler.scheduleAll()
+            }
         }
     }
 

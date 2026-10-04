@@ -41,6 +41,21 @@ data class PlannedPaymentRuleEntity(
     @SerialName("description")
     val description: String? = null,
 
+    /**
+     * Day of the month to remind on, 1..31, or null for no monthly reminder.
+     *
+     * Nullable, and null is exactly what every existing row means today: this
+     * rule has no reminder. See `Migration133to134_BillReminderDueDay` for why
+     * this is not backfilled from [startDate] and why a rule could not express a
+     * day before this column existed.
+     *
+     * Stored as a day-of-month rather than a date so it survives month-end: a
+     * rule set to the 31st keeps meaning the 31st in February, where the clamped
+     * occurrence is the 28th or 29th. See `BillReminderDates`.
+     */
+    @SerialName("dueDayOfMonth")
+    val dueDayOfMonth: Int? = null,
+
     @Deprecated("Obsolete field used for cloud sync. Can't be deleted because of backwards compatibility")
     @SerialName("isSynced")
     val isSynced: Boolean = false,

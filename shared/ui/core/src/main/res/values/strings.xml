@@ -536,4 +536,13 @@
     <string name="account_type_bank">Bank</string>
     <string name="account_type_savings">Savings</string>
     <string name="savings_account_hint">Savings accounts are kept out of your Total Balance and counted as savings.</string>
+    <string name="bill_reminder">Bill reminder</string>
+    <string name="bill_reminder_due">Due %1$s - %2$s. Open the app to pay or adjust it.</string>
+    <string name="bill_reminder_pending_title">Upcoming bills</string>
+    <string name="bill_reminder_pending_empty">No bills are waiting to be paid.</string>
+    <string name="bill_reminder_pending_unpaid">UNPAID</string>
+    <string name="bill_reminder_remind_on">Remind me on day %1$d of each month</string>
+    <string name="bill_reminder_no_day">No monthly reminder</string>
+    <string name="bill_reminder_dismiss">Dismiss</string>
+    <string name="bill_reminder_mark_paid">Mark as paid</string>
 </resources>

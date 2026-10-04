@@ -483,4 +483,13 @@
     <string name="account_type_bank">Bank</string>
     <string name="account_type_savings">Rekening Deposito</string>
     <string name="savings_account_hint">Rekening deposito tidak dihitung di Total Saldo dan dihitung sebagai tabungan.</string>
+    <string name="bill_reminder">Pengingat tagihan</string>
+    <string name="bill_reminder_due">Jatuh tempo %1$s - %2$s. Buka aplikasi untuk membayar atau menyesuaikan.</string>
+    <string name="bill_reminder_pending_title">Tagihan mendatang</string>
+    <string name="bill_reminder_pending_empty">Tidak ada tagihan yang menunggu dibayar.</string>
+    <string name="bill_reminder_pending_unpaid">BELUM DIBAYAR</string>
+    <string name="bill_reminder_remind_on">Ingatkan saya setiap tanggal %1$d setiap bulan</string>
+    <string name="bill_reminder_no_day">Tanpa pengingat bulanan</string>
+    <string name="bill_reminder_dismiss">Abaikan</string>
+    <string name="bill_reminder_mark_paid">Tandai sudah dibayar</string>
 </resources>

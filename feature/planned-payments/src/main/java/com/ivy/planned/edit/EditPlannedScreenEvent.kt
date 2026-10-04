@@ -45,4 +45,12 @@ sealed interface EditPlannedScreenEvent {
 
     data class OnAccountModalDataChanged(val accountModalData: AccountModalData?) :
         EditPlannedScreenEvent
+
+    /**
+     * The owner set (or cleared) the day of the month to be reminded on.
+     *
+     * Null means "no monthly reminder", which is the state every pre-existing
+     * rule is in and the state a rule stays in unless the owner changes it.
+     */
+    data class OnDueDayOfMonthChanged(val dueDayOfMonth: Int?) : EditPlannedScreenEvent
 }
