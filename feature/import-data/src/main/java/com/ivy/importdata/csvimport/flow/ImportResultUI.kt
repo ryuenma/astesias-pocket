@@ -12,7 +12,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -22,7 +21,6 @@ import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
 import com.ivy.importdata.csv.Spacer8
 import com.ivy.legacy.utils.format
-import com.ivy.navigation.CSVScreen
 import com.ivy.navigation.navigation
 import com.ivy.ui.R
 import com.ivy.wallet.ui.theme.GradientIvy
@@ -35,12 +33,17 @@ import com.ivy.wallet.ui.theme.components.IvyDividerLine
 import com.ivy.wallet.ui.theme.components.OnboardingButton
 import kotlinx.collections.immutable.persistentListOf
 
+/**
+ * Reports what an import did, and when it failed, why.
+ *
+ * The "consider using manual CSV import" remedy this screen used to offer is
+ * gone: CSV import is out of scope for this fork, so pointing a user at it sent
+ * them into a column-mapping flow the app does not support.
+ */
 @SuppressLint("ComposeModifierMissing")
 @Composable
 fun ImportResultUI(
     result: ImportResult,
-    launchedFromOnboarding: Boolean,
-    isManualCsvImport: Boolean = false,
     onTryAgain: (() -> Unit)? = null,
     onFinish: () -> Unit,
 ) {
@@ -94,38 +97,6 @@ fun ImportResultUI(
         )
 
         // TODO: Implement "See failed imports"
-
-        if (!isManualCsvImport) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp),
-                text = stringResource(R.string.csv_import_failed),
-                color = UI.colors.pureInverse,
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .padding(horizontal = 16.dp),
-                onClick = {
-                    nav.navigateTo(CSVScreen(launchedFromOnboarding = launchedFromOnboarding))
-                }
-            ) {
-                Text(
-                    text = stringResource(id = R.string.manual_csv_import),
-                    style = UI.typo.b2.style(
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                )
-            }
-        }
 
         Spacer(Modifier.weight(1f))
 
@@ -249,17 +220,24 @@ private fun FailedSectionUI(
             )
         )
 
-        Text(
-            modifier = Modifier.padding(horizontal = 32.dp),
-            text = stringResource(
-                R.string.rows_from_csv_not_recognized,
-                result.rowsFound - result.transactionsImported
-            ),
-            style = UI.typo.nB2.style(
-                fontWeight = FontWeight.Bold,
-                color = Gray
+        // Say why the import failed, not how many CSV rows went unrecognised -
+        // see failedRowsMessage for why that distinction matters.
+        val failureText = failedRowsMessage(result)
+        val notImported = result.rowsFound - result.transactionsImported
+        if (failureText != null) {
+            Text(
+                modifier = Modifier.padding(horizontal = 32.dp),
+                text = if (result.errorMessage != null) {
+                    failureText
+                } else {
+                    stringResource(R.string.rows_not_imported, notImported)
+                },
+                style = UI.typo.nB2.style(
+                    fontWeight = FontWeight.Bold,
+                    color = Gray
+                )
             )
-        )
+        }
     }
 }
 
@@ -275,7 +253,6 @@ private fun Preview() {
                 categoriesImported = 13,
                 failedRows = persistentListOf()
             ),
-            launchedFromOnboarding = false,
         ) {
         }
     }

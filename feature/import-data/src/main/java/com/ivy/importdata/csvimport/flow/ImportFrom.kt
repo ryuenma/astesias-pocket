@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,18 +29,24 @@ import androidx.compose.ui.unit.dp
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
 import com.ivy.legacy.domain.deprecated.logic.csv.model.ImportType
-import com.ivy.navigation.CSVScreen
 import com.ivy.navigation.navigation
 import com.ivy.onboarding.components.OnboardingToolbar
 import com.ivy.ui.R
 import com.ivy.wallet.ui.theme.components.GradientCutBottom
 import com.ivy.wallet.ui.theme.components.IvyIcon
 
+/**
+ * Step 2 of 4: pick where your data comes from.
+ *
+ * Only Ivy Wallet backups are offered. The "Manual CSV import" button that used
+ * to sit above this list is gone: CSV import is out of scope for this fork, and
+ * leaving the affordance reachable let a user start a column-mapping flow the
+ * app does not support.
+ */
 @ExperimentalFoundationApi
 @Composable
 fun BoxWithConstraintsScope.ImportFrom(
     hasSkip: Boolean,
-    launchedFromOnboarding: Boolean,
 
     onSkip: () -> Unit = {},
     onImportFrom: (ImportType) -> Unit = {},
@@ -62,29 +67,6 @@ fun BoxWithConstraintsScope.ImportFrom(
                 onSkip = onSkip
             )
             // onboarding toolbar include paddingBottom 16.dp
-        }
-
-        item {
-            Spacer(Modifier.height(8.dp))
-            val nav = navigation()
-            Button(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .padding(horizontal = 16.dp),
-                onClick = {
-                    nav.navigateTo(CSVScreen(launchedFromOnboarding))
-                }
-            ) {
-                Text(
-                    text = stringResource(id = R.string.manual_csv_import),
-                    style = UI.typo.b2.style(
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                )
-            }
-            Spacer(Modifier.height(16.dp))
         }
 
         item {
@@ -164,7 +146,7 @@ private fun Preview() {
     com.ivy.legacy.IvyWalletPreview {
         ImportFrom(
             hasSkip = true,
-            launchedFromOnboarding = false,
+            onSkip = {},
         )
     }
 }

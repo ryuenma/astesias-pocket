@@ -78,7 +78,6 @@ private fun BoxWithConstraintsScope.UI(
         ImportStep.IMPORT_FROM -> {
             ImportFrom(
                 hasSkip = screen.launchedFromOnboarding,
-                launchedFromOnboarding = screen.launchedFromOnboarding,
                 onSkip = onSkip,
                 onImportFrom = onChooseImportType
             )
@@ -102,7 +101,6 @@ private fun BoxWithConstraintsScope.UI(
         ImportStep.RESULT -> {
             ImportResultUI(
                 result = importResult!!,
-                launchedFromOnboarding = screen.launchedFromOnboarding,
             ) {
                 onFinish()
             }

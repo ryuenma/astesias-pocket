@@ -66,8 +66,6 @@ fun CSVScreen(
         is UIState.Processing -> ImportProcessing(progressPercent = ui.percent)
         is UIState.Result -> ImportResultUI(
             result = ui.importResult,
-            isManualCsvImport = true,
-            launchedFromOnboarding = screen.launchedFromOnboarding,
             onTryAgain = null,
             onFinish = {
                 viewModel.onEvent(

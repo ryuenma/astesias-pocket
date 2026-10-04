@@ -89,7 +89,6 @@ class OnboardingViewModel @Inject constructor(
 
     private suspend fun initiateSettings(isSystemDarkMode: Boolean) {
         val defaultCurrency = IvyCurrency.getDefault()
-        _currency.value = defaultCurrency
 
         ioThread {
             if (settingsDao.findAll().isEmpty()) {
@@ -103,6 +102,24 @@ class OnboardingViewModel @Inject constructor(
                 )
             }
         }
+
+        // Read back what is actually stored rather than assuming the default.
+        // Re-running onboarding over a populated profile used to re-select the
+        // device currency and offer to overwrite the real one.
+        adoptStoredCurrency(defaultCurrency)
+    }
+
+    /**
+     * Points the currency step at the currency the settings row already holds.
+     *
+     * This is what stops an import from being undone: the importer writes the
+     * backup's own currency (IDR), and the step must present that, not the
+     * device default, or completing onboarding replaces it.
+     */
+    private suspend fun adoptStoredCurrency(fallback: IvyCurrency) {
+        val storedCode = ioThread { settingsDao.findFirstOrNull()?.currency }
+        val code = preselectedCurrencyCode(storedCode, fallback.code)
+        _currency.value = IvyCurrency.fromCode(code) ?: fallback
     }
 
     override fun onEvent(event: OnboardingEvent) {
@@ -127,8 +144,20 @@ class OnboardingViewModel @Inject constructor(
 
     private suspend fun setBaseCurrency(baseCurrency: IvyCurrency) {
         ioThread {
+            val stored = settingsDao.findFirstOrNull()
+            // Writing the unchanged preselection is how the import was undone:
+            // the picker opens on the imported currency, so tapping "Set" must
+            // be a no-op rather than a silent overwrite of the same value.
+            if (stored != null && !shouldPersistCurrency(stored.currency, baseCurrency.code)) {
+                return@ioThread
+            }
             settingsWriter.save(
-                settingsDao.findFirst().copy(currency = baseCurrency.code)
+                (stored ?: Settings(
+                    theme = Theme.LIGHT,
+                    name = "",
+                    baseCurrency = baseCurrency.code,
+                    bufferAmount = 1000.0.toBigDecimal()
+                ).toEntity()).copy(currency = baseCurrency.code)
             )
         }
         _currency.value = baseCurrency
@@ -136,7 +165,17 @@ class OnboardingViewModel @Inject constructor(
     }
 
     /** Called by the import flow when it finishes. */
-    fun importFinished(success: Boolean) = router.importFinished(success)
+    fun importFinished(success: Boolean) {
+        viewModelScope.launch {
+            // The import just wrote the backup's own settings, including its
+            // currency. Re-read it so the next step presents IDR rather than
+            // asking the user to confirm the device default over it.
+            if (success) {
+                adoptStoredCurrency(IvyCurrency.getDefault())
+            }
+            router.importFinished(success)
+        }
+    }
 
     fun importSkip() = router.importSkip()
 }

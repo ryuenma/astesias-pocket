@@ -69,7 +69,7 @@
     <string name="accounts_imported">%1$d accounts</string>
     <string name="categories_imported">%1$d categories</string>
     <string name="failed">Failed</string>
-    <string name="rows_from_csv_not_recognized">%1$d rows from the CSV file were not recognized</string>
+    <string name="rows_not_imported">%1$d rows from the file were not imported</string>
     <string name="finish">Finish</string>
     <string name="add_description">Add description</string>
     <string name="description">Description</string>
@@ -476,8 +476,6 @@
     <string name="your_data_will_be_saved_only_locally">Your data will be stored locally on your device. If you uninstall the app or switch devices, you may lose your data. To prevent this, we recommend that you regularly export your backups.</string>
     <string name="you_owe">You owe: %1$s</string>
     <string name="you_are_owed">You\'re owed %1$s</string>
-    <string name="manual_csv_import">Manual CSV import</string>
-    <string name="csv_import_failed">If this doesn\'t work, consider using manual CSV import.</string>
     <string name="import_a_csv_file_to_continue">Import a CSV file to continue.</string>
     <string name="import_csv_continue">Continue</string>
     <string name="warning_import_csv_file">"\n!!!⚠️ WARNING: Importing may create duplicate transactions!!!\nPlease note that duplicate transactions cannot be easily removed and will need to be deleted individually.\nReason: We cannot parse transaction IDs because Ivy Wallet uses UUIDs exclusively, while other apps do not.\nIf you\'re starting fresh, you can safely ignore this message."</string>
