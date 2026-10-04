@@ -71,6 +71,7 @@ class CategoriesViewModel @Inject constructor(
         return CategoriesScreenState(
             baseCurrency = getBaseCurrency(),
             categories = getCategories(),
+            allCategories = categories.value.map(CategoryData::category).toImmutableList(),
             reorderModalVisible = getReorderModalVisible(),
             categoryModalData = getCategoryModalData(),
             sortOrder = getSortOrder(),

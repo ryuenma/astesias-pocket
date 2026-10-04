@@ -89,6 +89,37 @@ class CategoryTree private constructor(
     }
 
     /**
+     * Whether [candidate] may become [category]'s parent.
+     *
+     * A null [candidate] means "top level", which is always allowed.
+     *
+     * [rollupIds] is the subtree INCLUDING [category] itself, so one lookup
+     * rejects both forbidden cases: a category that is its own parent, and a
+     * category filed under its own descendant. Both are storable (parentId has
+     * no constraint) and both are what a parent selector can produce by
+     * accident, because the selector is offered the user's own categories as
+     * options.
+     *
+     * Falls back to "allowed" for a [category] that is not in this tree,
+     * matching [rollupIds]: there is no subtree to be inside of.
+     */
+    fun canBeParentOf(candidate: CategoryId?, category: Category): Boolean =
+        candidate == null || candidate.value !in rollups[category.id].orEmpty()
+
+    /**
+     * The categories offered as parents when editing [category]: the roots,
+     * minus everything that would make the hierarchy invalid.
+     *
+     * Roots only, because the picker renders two levels - offering a
+     * subcategory as a parent would produce a third level that gets promoted
+     * straight back to the top (see [of]).
+     */
+    fun parentCandidates(category: Category): List<Category> {
+        val forbidden = rollups[category.id].orEmpty()
+        return roots.filter { it.id.value !in forbidden }
+    }
+
+    /**
      * Whether a transaction filed under [transactionCategoryId] counts
      * towards [selected].
      *

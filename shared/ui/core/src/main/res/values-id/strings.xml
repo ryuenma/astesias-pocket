@@ -210,6 +210,8 @@
     <string name="edit_category">Edit kategori</string>
     <string name="create_category">Buat kategori</string>
     <string name="category_name">Nama kategori</string>
+    <string name="parent_category">Kategori induk</string>
+    <string name="no_parent_category">Tidak ada (tingkat atas)</string>
     <string name="choose_category">Pilih kategori</string>
     <string name="description_text_field_hint">Masukkan detail di sini</string>
     <string name="clean_filter">Hapus Filter</string>

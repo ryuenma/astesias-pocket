@@ -212,6 +212,8 @@
     <string name="edit_category">Edit category</string>
     <string name="create_category">Create category</string>
     <string name="category_name">Category name</string>
+    <string name="parent_category">Parent category</string>
+    <string name="no_parent_category">None (top level)</string>
     <string name="choose_category">Choose category</string>
     <string name="description_text_field_hint">Enter any details here</string>
     <string name="clean_filter">Clear filter</string>

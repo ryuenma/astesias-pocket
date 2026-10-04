@@ -112,7 +112,50 @@ class PreloadDataLogic @Inject constructor(
         for (createData in categoriesToPreload) {
             preloadCategory(createData)
         }
+
+        preloadSubcategories()
     }
+
+    /**
+     * Seeded children, so a fresh install shows what a subcategory is.
+     *
+     * Without this the hierarchy is unreachable on day one: every seeded
+     * category is a root, the picker has no chevron to draw, and the owner
+     * would have to hand-build a subcategory to discover the feature exists.
+     *
+     * Deliberately ONE pair, and deliberately under Food & Drinks. "Groceries"
+     * is the obvious-looking child and the wrong answer: it is already seeded
+     * as a top-level category in its own right, so nesting it here would
+     * silently re-parent a category the user already transacts against.
+     * "Restaurant" is chosen instead because it is absent from the root list
+     * entirely, so nothing is re-parented and no name is duplicated.
+     */
+    private suspend fun preloadSubcategories() {
+        val parents = categoryRepository.findAll()
+            .associateBy { it.name.value.lowercase() }
+
+        for ((parentName, createData) in preloadSubcategoriesCreateData()) {
+            val parent = parents[parentName.lowercase()] ?: continue
+            preloadCategory(createData.copy(parentId = parent.id))
+        }
+    }
+
+    /**
+     * Child categories keyed by the LOCALISED name of their parent.
+     *
+     * Keyed by name rather than by id because every id is minted at seed time
+     * ([preloadCategory] uses [UUID.randomUUID]), so a child cannot be
+     * declared next to its parent in one list. A parent that is missing - a
+     * locale whose string was renamed, say - is skipped, leaving the child
+     * unseeded rather than pointed at nothing.
+     */
+    private fun preloadSubcategoriesCreateData(): List<Pair<String, CreateCategoryData>> = listOf(
+        stringRes(R.string.food_drinks) to CreateCategoryData(
+            name = stringRes(R.string.restaurant),
+            color = Orange3,
+            icon = "restaurant"
+        ),
+    )
 
     private fun preloadCategoriesCreateData() = listOf(
         CreateCategoryData(
@@ -186,6 +229,7 @@ class PreloadDataLogic @Inject constructor(
                 icon = data.icon?.let(IconAsset::from)?.getOrNull(),
                 orderNum = categoryOrderNum++,
                 id = CategoryId(UUID.randomUUID()),
+                parentId = data.parentId,
             )
         }.getOrNull()
 

@@ -450,6 +450,7 @@ private fun BoxWithConstraintsScope.UI(
 
     CategoryModal(
         modal = categoryModalData,
+        categories = categories,
         onCreateCategory = { },
         onEditCategory = onEditCategory,
         dismiss = {

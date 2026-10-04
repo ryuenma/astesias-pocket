@@ -316,6 +316,113 @@ class CategoryTreeTest {
         tree.matches(restaurants.id.value, null) shouldBe false
     }
 
+    // ---- Parent selection ----
+
+    /**
+     * The shape a fresh install actually produces.
+     *
+     * Mirrors PreloadDataLogic.preloadCategories: ten seeded roots in list
+     * order, then one child under Food & Drinks created afterwards. The
+     * child's global orderNum is therefore HIGHER than every root's - which is
+     * exactly the case the picker's expand chevron has to render, and the one
+     * that cannot be reproduced by a hand-built two-element list.
+     */
+    @Test
+    fun `seeded shape - one child under Food & Drinks, nested not promoted`() {
+        val roots = listOf(
+            category("Food & Drinks", orderNum = 0.0),
+            category("Bills & Fees", orderNum = 1.0),
+            category("Transport", orderNum = 2.0),
+            category("Groceries", orderNum = 3.0),
+            category("Entertainment", orderNum = 4.0),
+        )
+        val food = roots.first()
+        val restaurant = category("Restaurant", parentId = food.id, orderNum = 5.0)
+
+        val tree = CategoryTree.of(roots + restaurant)
+
+        // Groceries stays a sibling: the seed deliberately nests Restaurant
+        // rather than re-parenting an existing top-level category.
+        names(tree.roots) shouldBe listOf(
+            "Food & Drinks",
+            "Bills & Fees",
+            "Transport",
+            "Groceries",
+            "Entertainment",
+        )
+        food.children(tree) shouldBe listOf("Restaurant")
+
+        // What the chevron needs: exactly one parent is expandable, and
+        // expanding it reveals exactly one indented child.
+        tree.roots.count { tree.hasChildren(it) } shouldBe 1
+    }
+
+    @Test
+    fun `parent selector offers the roots, so a new category can be nested`() {
+        val food = category("Food")
+        val rent = category("Rent")
+        val tree = CategoryTree.of(listOf(food, rent))
+
+        // A category not yet in the tree has no subtree, so every root is
+        // offered. This is the list the create path renders.
+        tree.parentCandidates(category("Brand new")) shouldBe listOf(food, rent)
+    }
+
+    @Test
+    fun `a category cannot be its own parent`() {
+        val food = category("Food")
+        val tree = CategoryTree.of(listOf(food))
+
+        tree.canBeParentOf(food.id, food) shouldBe false
+        // Clearing is always allowed - that is how a subcategory is promoted
+        // back to the top.
+        tree.canBeParentOf(null, food) shouldBe true
+    }
+
+    @Test
+    fun `a category cannot be filed under its own descendant`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val pizza = category("Pizza", parentId = restaurants.id)
+
+        val tree = CategoryTree.of(listOf(food, restaurants, pizza))
+
+        // Food above its own grandchild would create a cycle, which is
+        // storable because parentId has no constraint.
+        tree.canBeParentOf(pizza.id, food) shouldBe false
+        tree.canBeParentOf(restaurants.id, food) shouldBe false
+    }
+
+    @Test
+    fun `parent candidates exclude the category itself and its whole subtree`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val pizza = category("Pizza", parentId = restaurants.id)
+        val rent = category("Rent")
+
+        val tree = CategoryTree.of(listOf(food, restaurants, pizza, rent))
+
+        // Roots are the only candidates, so pizza - a third level - is not
+        // offered at all, and food cannot be offered to itself. Rent remains.
+        tree.parentCandidates(food) shouldBe listOf(rent)
+    }
+
+    /**
+     * Editing a subcategory must still be able to keep or clear its parent,
+     * otherwise the hierarchy can only ever be built, never undone.
+     */
+    @Test
+    fun `a subcategory's own parent stays selectable while editing it`() {
+        val food = category("Food")
+        val restaurants = category("Restaurants", parentId = food.id)
+        val rent = category("Rent")
+
+        val tree = CategoryTree.of(listOf(food, restaurants, rent))
+
+        tree.canBeParentOf(food.id, restaurants) shouldBe true
+        names(tree.parentCandidates(restaurants)) shouldBe listOf("Food", "Rent")
+    }
+
     // ---- Budget filter ----
 
     @Test

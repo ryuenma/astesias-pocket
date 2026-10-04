@@ -2,6 +2,7 @@ package com.ivy.wallet.domain.deprecated.logic
 
 import androidx.compose.ui.graphics.toArgb
 import arrow.core.raise.either
+import com.ivy.data.category.CategoryTree
 import com.ivy.data.model.Category
 import com.ivy.data.model.CategoryId
 import com.ivy.data.model.primitive.ColorInt
@@ -26,6 +27,15 @@ class CategoryCreator @Inject constructor(
 
         try {
             val newCategory = ioThread {
+                // The parent arrives from a picker listing the user's own
+                // categories, so it can name a row that was deleted while the
+                // modal was open. Dropping it keeps the new category a root
+                // rather than storing a parentId that resolves to nothing -
+                // an orphan is reachable (CategoryTree promotes it) but it is
+                // not what the user asked for.
+                val parentId = data.parentId
+                    ?.takeIf { candidate -> categoryRepository.findById(candidate) != null }
+
                 val newCategory: Category? = either {
                     Category(
                         name = NotBlankTrimmedString.from(name.trim()).bind(),
@@ -33,6 +43,7 @@ class CategoryCreator @Inject constructor(
                         icon = data.icon?.let(IconAsset::from)?.getOrNull(),
                         orderNum = categoryRepository.findMaxOrderNum().nextOrderNum(),
                         id = CategoryId(UUID.randomUUID()),
+                        parentId = parentId,
                     )
                 }.getOrNull()
 
@@ -55,11 +66,25 @@ class CategoryCreator @Inject constructor(
         if (updatedCategory.name.value.isBlank()) return
 
         try {
-            ioThread {
-                categoryRepository.save(updatedCategory)
+            val safeCategory = ioThread {
+                // Re-parenting is the one place a cycle can be introduced:
+                // the picker offers existing categories, so a user can aim a
+                // category at itself or at one of its own children. Nothing in
+                // the schema stops either, so the check lives here, on the one
+                // path every edit goes through.
+                val tree = CategoryTree.of(categoryRepository.findAll())
+                if (tree.canBeParentOf(updatedCategory.parentId, updatedCategory)) {
+                    updatedCategory
+                } else {
+                    updatedCategory.copy(parentId = null)
+                }
             }
 
-            onRefreshUI(updatedCategory)
+            ioThread {
+                categoryRepository.save(safeCategory)
+            }
+
+            onRefreshUI(safeCategory)
         } catch (e: Exception) {
             e.printStackTrace()
         }

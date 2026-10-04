@@ -566,7 +566,7 @@ private fun BoxWithConstraintsScope.UI(
         }
     )
 
-    CategoryModal(modal = categoryModalData, onCreateCategory = { createData ->
+    CategoryModal(modal = categoryModalData, categories = categories, onCreateCategory = { createData ->
         onCreateCategory(createData)
         chooseCategoryModalVisible = false
     }, onEditCategory = onEditCategory, dismiss = {

@@ -231,6 +231,10 @@ private fun BoxWithConstraintsScope.UI(
 
     CategoryModal(
         modal = state.categoryModalData,
+        // Search filters the visible list, so the parent selector must be
+        // offered the UNFILTERED set: filtering to "foo" and then refusing to
+        // let you nest under Bills & Fees would be a bug, not a feature.
+        categories = state.allCategories,
         onCreateCategory = {
             onEvent(CategoriesScreenEvent.OnCreateCategory(it))
         },
