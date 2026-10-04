@@ -11,23 +11,13 @@ class FakeCategoryDao : CategoryDao, WriteCategoryDao {
     private val items = mutableListOf<CategoryEntity>()
 
     override suspend fun findAll(deleted: Boolean): List<CategoryEntity> {
-        return items.filter { it.isDeleted == deleted }
+        // Sorted because the real query is `ORDER BY orderNum ASC`; a fake that
+        // answers in insertion order makes any ordering assertion meaningless.
+        return items.filter { it.isDeleted == deleted }.sortedBy { it.orderNum }
     }
 
     override suspend fun findById(id: UUID): CategoryEntity? {
         return items.find { it.id == id }
-    }
-
-    override suspend fun findRoots(deleted: Boolean): List<CategoryEntity> {
-        return items
-            .filter { it.isDeleted == deleted && it.parentId == null }
-            .sortedBy { it.orderNum }
-    }
-
-    override suspend fun findSubcategories(parentId: UUID, deleted: Boolean): List<CategoryEntity> {
-        return items
-            .filter { it.isDeleted == deleted && it.parentId == parentId }
-            .sortedBy { it.orderNum }
     }
 
     override suspend fun findMaxOrderNum(): Double? {

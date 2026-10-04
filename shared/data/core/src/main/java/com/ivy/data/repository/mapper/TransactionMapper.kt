@@ -100,6 +100,15 @@ class TransactionMapper @Inject constructor(
 
                 val toAccount = accountRepository.findById(toAccountId)
 
+                // A cross-profile leg written through this mapper comes back out
+                // with a null `counterpartProfileId` and a null
+                // `linkedTransactionId`: the domain `Transaction` has no fields to
+                // read them from. A known gap, not a claim of correctness. It does
+                // not affect the owner-confirmation path, which writes legs
+                // straight to `WriteTransactionDao` and sets both itself - but the
+                // correlation id is the idempotency key, so a flow that round-trips
+                // a leg through the domain model cannot recognise a replay.
+                //
                 // A cross-profile transfer names an account in SOMEONE ELSE'S ledger.
                 // That id cannot resolve here, and must not be required to: the mapper
                 // reports failure with an Either and every ledger read discards those
@@ -194,20 +203,3 @@ class TransactionMapper @Inject constructor(
         )
     }
 }
-
-/**
- * Cross-profile legs written through this mapper LOSE their counterpart and
- * correlation id.
- *
- * An honest statement of a known gap, not a claim of correctness: the domain
- * `Transaction` has no `counterpartProfileId` / `linkedTransactionId` field, so
- * there is nothing here to read them from and they come out null.
- *
- * This does not affect the owner-confirmation path, which writes legs directly as
- * `TransactionEntity` through `WriteTransactionDao` and therefore sets both fields
- * explicitly. It WOULD affect a future flow that round-trips a cross-profile leg
- * through the domain model, and it is worth fixing then - the correlation id is
- * the idempotency key, and a null one cannot be recognised as a replay.
- * `CrossProfileTransferMapperTest` pins the read side, so a regression there is
- * caught by a test rather than discovered by a user.
- */

@@ -9,11 +9,9 @@ import java.util.UUID
  * Idempotency and the dismissal path for a mirrored partner transfer.
  *
  * The property under test throughout is that a replayed event never creates a
- * second row. That is the property which has already broken once on this project
- * - a PocketBase collection with `unique: true` and no real index accepted a
- * replay and recorded the same transfer twice. So the replay cases below are
- * deliberately exhaustive over every state rather than just asserting the happy
- * path once.
+ * second row, so the replay cases below are deliberately exhaustive over every
+ * state rather than asserting the happy path once. Why that matters, and what
+ * the database adds on top: `Migration132to133_PendingTransfers`.
  */
 class TransferInboxTest {
 
@@ -79,18 +77,11 @@ class TransferInboxTest {
 
     @Test
     fun `two in-flight events for the same correlation id are the window the unique key closes`() {
-        // Documented limit of the pure function, pinned deliberately so nobody
-        // later "simplifies" it into a false claim of full protection.
-        //
-        // [onEventArrived] only sees COMMITTED rows. Two POSTs that are both in
-        // flight before either commits both read null, so this function alone
-        // would permit two writes. What actually stops the second is the inbox
-        // table's primary key on correlationId - the same key that makes the
-        // correlation id the idempotency key - so the second INSERT fails at the
-        // database instead of duplicating.
-        //
-        // So: idempotency here is the pair (this decision, that unique key).
-        // Neither half is sufficient, which is why the key is not optional.
+        // The documented limit of this pure function, pinned deliberately so
+        // nobody later "simplifies" it into a false claim of full protection.
+        // [onEventArrived] only sees COMMITTED rows, so two in-flight
+        // deliveries both read null and both are permitted to write. The
+        // primary key is the other half - see the migration.
         val concurrent = listOf<PendingTransferState?>(null, null)
         val permitted = concurrent.count { TransferInbox.onEventArrived(it).writesNewRow() }
 
@@ -136,8 +127,6 @@ class TransferInboxTest {
 
     @Test
     fun `declining never touches the ledger`() {
-        // The money already moved. Her declining it cannot un-move it, and must
-        // not retract the owner's row, which would falsify her ledger.
         val decision = TransferInbox.onUserDecision(
             existing = PendingTransferState.PENDING,
             action = TransferInbox.Action.DECLINE

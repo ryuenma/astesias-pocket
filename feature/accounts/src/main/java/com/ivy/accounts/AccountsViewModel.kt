@@ -35,6 +35,17 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * The savings figure: the balance held in accounts excluded from the total.
+ *
+ * Subtracting the includeInBalance-only total from the all-accounts total is
+ * arithmetic rather than a second query, so it is extracted here purely to be
+ * testable off-device. SavingsBalanceTest pins this function; nothing else in
+ * the app needs it.
+ */
+internal fun savingsBalance(allAccounts: Double, includedOnly: Double): Double =
+    allAccounts - includedOnly
+
 @Stable
 @SuppressLint("StaticFieldLeak")
 @HiltViewModel
@@ -213,7 +224,10 @@ class AccountsViewModel @Inject constructor(
         // difference between the two totals computed above: one includes every
         // account, the other only includeInBalance ones. No second query, and
         // no chance of the two figures disagreeing later.
-        val savings = totalBalanceWithExcludedAccounts - totalBalanceWithoutExcludedAccounts
+        val savings = savingsBalance(
+            allAccounts = totalBalanceWithExcludedAccounts,
+            includedOnly = totalBalanceWithoutExcludedAccounts,
+        )
 
         baseCurrency = baseCurrencyCode
         accountsData = accountsDataList

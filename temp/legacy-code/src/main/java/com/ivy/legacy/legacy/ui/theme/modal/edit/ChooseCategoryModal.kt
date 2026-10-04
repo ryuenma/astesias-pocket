@@ -175,7 +175,7 @@ private fun CategoryPicker(
     // A category with children is an ordinary Category that happens to own
     // other categories, so the tree is derived from parentId rather than from
     // a second list the caller would have to keep in sync. See CategoryTree
-    // for why the tree is built here instead of trusting findRoots().
+    // for why the tree is built here instead of trusting a "roots" query.
     val tree = remember(categories) { CategoryTree.of(categories) }
 
     // Flattened to what is visible right now: every parent, plus the children

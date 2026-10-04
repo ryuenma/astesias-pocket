@@ -67,8 +67,8 @@ class NotificationService @Inject constructor(
         if (!permissionGate.canPostNotifications()) {
             // Recorded, not just logged: the worker that just lost this
             // notification runs in the background with no UI, so its log line
-            // reaches nobody. The settings screen reads this to tell the user
-            // reminders are blocked, and offers a way to unblock them.
+            // reaches nobody. The flag is cleared below when the user turns
+            // reminders back on.
             sharedPrefs.putBoolean(SharedPrefs.NOTIFICATIONS_BLOCKED, true)
             Timber.w(
                 "Notification %d dropped: POST_NOTIFICATIONS is not granted. " +
@@ -78,8 +78,7 @@ class NotificationService @Inject constructor(
             return NotificationResult.BlockedByPermission
         }
 
-        // The user turned notifications back on: clear the stale blocked flag so
-        // settings stops advertising a problem that no longer exists.
+        // The user turned notifications back on, so clear the stale blocked flag.
         sharedPrefs.putBoolean(SharedPrefs.NOTIFICATIONS_BLOCKED, false)
 
         return try {
@@ -101,14 +100,6 @@ class NotificationService @Inject constructor(
             NotificationResult.Failed
         }
     }
-
-    /**
-     * Whether a notification has recently been dropped for lack of permission.
-     *
-     * Read by the settings screen to render the "reminders are off" row.
-     */
-    fun wasBlockedByPermission(): Boolean =
-        sharedPrefs.getBoolean(SharedPrefs.NOTIFICATIONS_BLOCKED, false)
 
     fun dismissNotification(notificationId: Int) {
         val notificationManager =

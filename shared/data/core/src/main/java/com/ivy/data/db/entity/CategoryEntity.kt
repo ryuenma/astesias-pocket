@@ -23,12 +23,12 @@ import java.util.*
  *
  * Deliberately NOT a foreign key. FK enforcement would make deleting a parent
  * either cascade into its children or fail outright, and neither is a policy a
- * schema should pick on behalf of a user's spending history. Integrity is the
- * caller's job - see `CategoryDao.findSubcategories` for reading a parent's
- * children before deciding what to do with them.
+ * schema should pick on behalf of a user's spending history. Integrity belongs
+ * above the data layer - `CategoryTree` resolves a `parentId` that points at
+ * nothing back to the top level rather than letting it strand a subtree.
  *
- * Indexed because the category picker reads one parent's children per expanded
- * row, so this lookup runs on every screen showing a category tree.
+ * Indexed because `CategoryTree` groups every category by `parentId` on each
+ * screen that shows a category tree.
  */
 @Suppress("DataClassDefaultValues")
 @Keep

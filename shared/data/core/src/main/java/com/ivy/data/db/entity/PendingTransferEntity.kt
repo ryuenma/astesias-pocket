@@ -20,18 +20,10 @@ import java.util.UUID
  * to be told about.
  *
  * [correlationId] is the primary key, and that is the load-bearing decision of
- * the whole feature rather than an incidental choice:
- *
- *  - It is the cross-profile join key, because the two legs share no account id.
- *  - It is the idempotency key. Two deliveries of the same event resolve to the
- *    same row identity, so the second INSERT fails at the database instead of
- *    creating a second pending item.
- *
- * The history here is why this is not left to application logic: a PocketBase
- * collection on this project declared `unique: true` on a field with no real
- * index behind it, a replayed POST returned 200, and the same transfer was
- * recorded twice. A real PRIMARY KEY is the only thing that makes the duplicate
- * impossible rather than unlikely.
+ * the whole feature rather than an incidental choice: it is both the
+ * cross-profile join key, because the two legs share no account id, and the
+ * idempotency key. See `Migration132to133_PendingTransfers` for why the database
+ * has to enforce that rather than application logic.
  *
  * A declined transfer is RETAINED as [state] = DECLINED rather than deleted, for
  * the same reason. Deleting it would let the next replayed delivery insert a

@@ -10,19 +10,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * The counterpart's side of a mirrored transfer: what arrives, what waits, and
- * what she decides.
+ * The counterpart's side of a mirrored transfer: what waits, and what she decides.
  *
- * This is where the idempotency rules meet the database. The decisions live in
- * [TransferInbox] as pure functions; this class applies them, and the safety
- * net underneath is the inbox table's primary key on `correlationId`. Both are
- * needed and neither is sufficient alone:
+ * The decisions live in [TransferInbox] as pure functions; this class applies
+ * them, and the safety net underneath is the inbox table's primary key on
+ * `correlationId`. Both are needed and neither is sufficient alone - see
+ * `Migration132to133_PendingTransfers` for that argument in full.
  *
- *  - [TransferInbox] stops a replayed delivery of a *known* transfer from
- *    rewriting her decision.
- *  - The primary key stops two *simultaneous* deliveries of an unknown transfer
- *    from creating two rows, which no read-then-write check can catch because
- *    both read "not seen yet" before either commits.
+ * NOT YET WIRED UP: [onEventArrived] is the only thing that inserts, and nothing
+ * calls it. There is no transfer-events endpoint on the sync client, so no row is
+ * ever inserted and the inbox is always empty in practice. Reading it and acting
+ * on it work, but they have nothing to act on: every guarantee below - the
+ * primary key, the IGNORE insert, the guarded decision - is tested and correct,
+ * and unexercised by the app as it stands.
  *
  * Everything here returns a value describing what happened rather than throwing.
  * A failure to sync must never take down a wallet, and the counterpart's inbox
@@ -35,7 +35,8 @@ class PendingTransferRepository @Inject constructor(
 ) {
 
     /**
-     * Handles one transfer event arriving from sync.
+     * Handles one transfer event arriving from sync. No caller yet: see the class
+     * doc. This is the insert half of the inbox and nothing reaches it.
      *
      * @return what was done, so a caller can log a replay as a replay instead of
      *   mistaking it for new data.
@@ -79,8 +80,7 @@ class PendingTransferRepository @Inject constructor(
      *
      * ACCEPT writes the real TRANSFER row. DECLINE writes only the tombstone: the
      * owner's leg is untouched, because the money already moved and her declining
-     * it cannot un-move it. Retracting the owner's row from here would falsify
-     * the owner's ledger, which is the worst outcome this feature could produce.
+     * it cannot un-move it. See [TransferInbox.Decision.touchesLedger] for why.
      *
      * @param senderAccountId the counterparty's account this money left, named as
      *   an id for the leg even though it does not resolve in her database. It is

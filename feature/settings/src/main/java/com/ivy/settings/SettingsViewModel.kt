@@ -107,7 +107,6 @@ class SettingsViewModel @Inject constructor(
             syncBaseUrl = syncConfig.baseUrl.orEmpty(),
             syncProfile = syncConfig.profileId,
             notificationsBlocked = getNotificationsBlocked(),
-            requestingNotificationPermission = getRequestingNotificationPermission(),
             notificationsPermanentlyDenied = getNotificationsPermanentlyDenied(),
         )
     }
@@ -283,10 +282,6 @@ class SettingsViewModel @Inject constructor(
 
     @Composable
     private fun getNotificationsBlocked(): Boolean = notificationsBlocked.value
-
-    @Composable
-    private fun getRequestingNotificationPermission(): Boolean =
-        requestingNotificationPermission.value
 
     @Composable
     private fun getNotificationsPermanentlyDenied(): Boolean =
@@ -567,9 +562,9 @@ class SettingsViewModel @Inject constructor(
     /**
      * Whether a system permission dialog is waiting to be shown.
      *
-     * Read by the screen to launch it. Kept as its own accessor rather than
-     * something the screen infers, so the "ask exactly once per request" rule
-     * lives here rather than being spread across the layer that renders it.
+     * Read by the screen to launch it, from a LaunchedEffect keyed on this flag:
+     * keying on the flag is what makes it one request per request rather than one
+     * per recomposition.
      */
     @Composable
     fun notificationPermissionRequestPending(): Boolean =
@@ -579,20 +574,23 @@ class SettingsViewModel @Inject constructor(
      * Opens this app's notification settings.
      *
      * The only route left once the user has declined for good: the system will
-     * not show another dialog, so the app cannot re-request. Falls back to the
-     * app details page if the notification-specific screen is missing.
+     * not show another dialog, so the app cannot re-request.
      */
     fun openNotificationSettings(context: Context) {
-        val intent = try {
-            permissionGate.appNotificationSettingsIntent()
-        } catch (e: ActivityNotFoundException) {
-            Timber.w(e, "No app notification settings screen; opening app details instead.")
-            permissionGate.appDetailsSettingsIntent()
-        }
-
         // A settings Intent cannot carry FLAG_ACTIVITY_NEW_TASK when launched from
         // an Activity context, and the activity here is the one already on top.
-        context.startActivity(intent)
+        //
+        // The fallback is around startActivity, not around building the Intent:
+        // an Intent never throws, the launch is what fails when no activity on
+        // the device handles the action. minSdk is 28 and
+        // ACTION_APP_NOTIFICATION_SETTINGS exists since API 26, so this is a
+        // floor for OEM ROMs that drop the screen rather than a real expectation.
+        try {
+            context.startActivity(permissionGate.appNotificationSettingsIntent())
+        } catch (e: ActivityNotFoundException) {
+            Timber.w(e, "No app notification settings screen; opening app details instead.")
+            context.startActivity(permissionGate.appDetailsSettingsIntent())
+        }
     }
 
     private fun setHideCurrentBalance(hideBalance: Boolean) {

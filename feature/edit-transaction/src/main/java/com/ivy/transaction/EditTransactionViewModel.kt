@@ -155,13 +155,7 @@ class EditTransactionViewModel @Inject constructor(
     )
 
     /**
-     * Loads the accounts published by other profiles.
-     *
-     * Failure is swallowed on purpose: an unreachable sync must not block recording a
-     * transfer that already happened, and the picker shows an honest empty state.
-     */
-    /**
-     * Show cached accounts immediately, then refresh in the background.
+     * Loads the accounts published by other profiles, then refreshes them.
      *
      * Two steps on purpose: the picker must never block on the network, because
      * the transfer being recorded already happened and the owner is waiting. A

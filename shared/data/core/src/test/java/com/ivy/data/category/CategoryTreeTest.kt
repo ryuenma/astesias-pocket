@@ -107,7 +107,7 @@ class CategoryTreeTest {
     /**
      * The delete policy is "no action" on purpose (see CategoryEntity), so a
      * parent can be deleted while its children survive. Their parentId now
-     * dangles. findRoots() would not return them, so a picker built straight
+     * dangles. A "roots" query would not return them, so a picker built straight
      * off that query would make them unselectable while their transactions
      * keep existing - spending history pointing at nothing reachable.
      */
@@ -354,7 +354,7 @@ class CategoryTreeTest {
 
         // What the chevron needs: exactly one parent is expandable, and
         // expanding it reveals exactly one indented child.
-        tree.roots.count { tree.hasChildren(it) } shouldBe 1
+        tree.roots.count { tree.childrenOf(it).isNotEmpty() } shouldBe 1
     }
 
     @Test

@@ -29,14 +29,6 @@ data class SettingsState(
      */
     val notificationsBlocked: Boolean = false,
     /**
-     * The system dialog is on screen right now.
-     *
-     * The row reads this to keep the user from firing a second request while the
-     * first is open: the system would answer the second with an instant denial
-     * and make the permission look permanently refused when it is not.
-     */
-    val requestingNotificationPermission: Boolean = false,
-    /**
      * The user has declined for good, so the system dialog will not appear again.
      *
      * The only remaining route is the app's settings page. Derived from the

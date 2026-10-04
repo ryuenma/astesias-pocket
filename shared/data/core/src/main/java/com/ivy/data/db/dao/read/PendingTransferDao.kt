@@ -23,7 +23,8 @@ import java.util.UUID
 interface PendingTransferDao {
 
     /**
-     * Inserts an item arriving from sync.
+     * Inserts an item arriving from sync. Reached only from
+     * `PendingTransferRepository.onEventArrived`, which nothing calls yet.
      *
      * `IGNORE`, never `REPLACE`: a replayed delivery of a transfer she has
      * already accepted or declined must NOT overwrite that decision back to
@@ -51,10 +52,6 @@ interface PendingTransferDao {
     @Query("SELECT * FROM pending_transfers WHERE state = 'PENDING' ORDER BY occurredOn DESC")
     suspend fun findPending(): List<PendingTransferEntity>
 
-    /** Every item, decided or not. Used by sync and by tests, not by the ledger. */
-    @Query("SELECT * FROM pending_transfers ORDER BY occurredOn DESC")
-    suspend fun findAll(): List<PendingTransferEntity>
-
     /**
      * Records her decision.
      *
@@ -75,9 +72,6 @@ interface PendingTransferDao {
      */
     @Query("SELECT * FROM pending_transfers WHERE correlationId = :correlationId LIMIT 1")
     suspend fun findByCorrelationId(correlationId: UUID): PendingTransferEntity?
-
-    @Query("DELETE FROM pending_transfers")
-    suspend fun deleteAll()
 }
 
 /**

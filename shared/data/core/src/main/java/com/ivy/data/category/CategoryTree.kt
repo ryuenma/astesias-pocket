@@ -17,9 +17,8 @@ import java.util.UUID
  * Two things follow from "no foreign key", and both are load-bearing:
  *
  *  1. **Orphans are representable.** A child whose parent row is gone has a
- *     `parentId` that resolves to nothing. `CategoryRepository.findRoots()`
- *     would not return it, so a picker built straight off the roots query
- *     would make that category unselectable while its transactions keep
+ *     `parentId` that resolves to nothing, so a picker that walked a "roots"
+ *     query would make that category unselectable while its transactions keep
  *     existing. [of] promotes orphans back to the top level.
  *
  *  2. **Cycles are representable.** `parentId` has no constraint, so A can
@@ -60,8 +59,6 @@ class CategoryTree private constructor(
      */
     fun childrenOf(category: Category): List<Category> =
         childrenByParent[category.id].orEmpty().filter { it.id !in rootIds }
-
-    fun hasChildren(category: Category): Boolean = childrenOf(category).isNotEmpty()
 
     /**
      * Every category id whose money belongs to [category]: its own id plus

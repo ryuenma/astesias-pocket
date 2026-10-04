@@ -4,16 +4,10 @@ package com.ivy.domain.usecase.transfer
  * The one decision that keeps sync safe: what should happen when a transfer
  * event arrives for a correlation id we may already have seen?
  *
- * This is a pure function on purpose. Idempotency is the property that stops a
- * replayed POST from double-recording money, and the history on this project is
- * that it is exactly the property which silently broke once already: a PocketBase
- * collection declared `unique: true` on a field without a real index, so a
- * replayed request returned 200 and wrote a second row. A replay bug does not
- * crash. It just quietly doubles someone's money, a week later, on a phone that
- * was offline at the time.
- *
- * So the rule is decided here, in one testable place, rather than being spread
- * across a repository and a DAO where each has to re-derive it.
+ * A pure function so the rule is decided in one testable place rather than being
+ * re-derived across a repository and a DAO. It is only half the guarantee; the
+ * inbox table's primary key is the other half, and only the pair is sufficient -
+ * see `Migration132to133_PendingTransfers`.
  */
 object TransferInbox {
 
@@ -111,7 +105,7 @@ fun TransferInbox.Outcome.writesNewRow(): Boolean = this is TransferInbox.Outcom
  *
  * Only ACCEPT does. Declining is deliberately ledger-neutral: the money already
  * moved, her declining it cannot un-move it, and the owner's row stays exactly
- * as recorded. Deleting the owner's transfer because the recipient did not want
+ * as recorded. Retracting the owner's transfer because the recipient did not want
  * it would falsify the owner's ledger - the single worst thing this feature
  * could do.
  */

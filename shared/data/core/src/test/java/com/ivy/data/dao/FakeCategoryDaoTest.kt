@@ -1,13 +1,23 @@
 package com.ivy.data.dao
 
+import com.ivy.data.category.CategoryTree
 import com.ivy.data.db.dao.fake.FakeCategoryDao
 import com.ivy.data.db.entity.CategoryEntity
+import com.ivy.data.repository.mapper.CategoryMapper
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import java.util.UUID
 
+/**
+ * The fake answers the queries `CategoryDao` declares.
+ *
+ * The hierarchy assertions below go through [treeOf], which is how the picker
+ * actually builds the tree: read everything, then let `CategoryTree.of` decide
+ * what is a root. Reading roots and children with separate queries is not a path
+ * any caller takes.
+ */
 class FakeCategoryDaoTest {
 
     private lateinit var dao: FakeCategoryDao
@@ -15,6 +25,13 @@ class FakeCategoryDaoTest {
     @Before
     fun setup() {
         dao = FakeCategoryDao()
+    }
+
+    private fun treeOf(entities: List<CategoryEntity>): CategoryTree {
+        val mapper = CategoryMapper()
+        return CategoryTree.of(
+            entities.mapNotNull { with(mapper) { it.toDomain() }.getOrNull() }
+        )
     }
 
     @Test
@@ -368,10 +385,10 @@ class FakeCategoryDaoTest {
 
         // when
         dao.saveMany(categories)
-        val res = dao.findRoots(false)
+        val tree = treeOf(dao.findAll(false))
 
         // then
-        res.map { it.id } shouldBe listOf(rootId)
+        tree.roots.map { it.id.value } shouldBe listOf(rootId)
     }
 
     @Test
@@ -403,10 +420,10 @@ class FakeCategoryDaoTest {
         )
 
         // when
-        val res = dao.findRoots(false)
+        val tree = treeOf(dao.findAll(false))
 
         // then
-        res.map { it.id } shouldBe listOf(first, second)
+        tree.roots.map { it.id.value } shouldBe listOf(first, second)
     }
 
     @Test
@@ -468,10 +485,11 @@ class FakeCategoryDaoTest {
         )
 
         // when
-        val res = dao.findSubcategories(rootId, false)
+        val tree = treeOf(dao.findAll(false))
+        val res = tree.childrenOf(tree.roots.single { it.id.value == rootId })
 
         // then
-        res.map { it.id } shouldBe listOf(childA, childB)
+        res.map { it.id.value } shouldBe listOf(childA, childB)
     }
 
     @Test
@@ -513,12 +531,12 @@ class FakeCategoryDaoTest {
         )
 
         // when
-        val notDeleted = dao.findSubcategories(rootId, false)
-        val deletedChildren = dao.findSubcategories(rootId, true)
+        val notDeleted = dao.findAll(false).map { it.id }
+        val deletedChildren = dao.findAll(true).map { it.id }
 
         // then
-        notDeleted.map { it.id } shouldBe listOf(kept)
-        deletedChildren.map { it.id } shouldBe listOf(deleted)
+        notDeleted shouldBe listOf(rootId, kept)
+        deletedChildren shouldBe listOf(deleted)
     }
 
     @Test
@@ -538,7 +556,8 @@ class FakeCategoryDaoTest {
         )
 
         // when
-        val res = dao.findSubcategories(leafId, false)
+        val tree = treeOf(dao.findAll(false))
+        val res = tree.childrenOf(tree.roots.single())
 
         // then
         res shouldBe emptyList()
