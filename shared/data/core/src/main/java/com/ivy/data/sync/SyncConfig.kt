@@ -66,7 +66,15 @@ class SyncConfig @Inject constructor(
             result
         } catch (e: Exception) {
             Timber.e(e, "Sync sign-in failed")
-            DirectoryAuthApi.Result(DirectoryAuthApi.Outcome.UNREACHABLE)
+            // Previously this returned a bare UNREACHABLE, which is how the modal
+            // ended up saying "could not reach the server" with nothing to act on.
+            // DirectoryAuthApi handles network failures internally and attaches a
+            // cause, so getting here at all means something threw OUTSIDE that
+            // block — and that something deserves naming rather than swallowing.
+            DirectoryAuthApi.Result(
+                DirectoryAuthApi.Outcome.UNREACHABLE,
+                detail = "${e::class.java.simpleName}: ${e.message ?: "sign-in failed before the server answered"}",
+            )
         }
     }
 

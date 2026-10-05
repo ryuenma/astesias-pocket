@@ -176,7 +176,10 @@ fun BoxWithConstraintsScope.SettingsScreen() {
                         DirectoryAuthApi.Outcome.UNREACHABLE -> SyncSignInResult.Outcome.UNREACHABLE
                         DirectoryAuthApi.Outcome.BAD_CREDENTIALS -> SyncSignInResult.Outcome.BAD_CREDENTIALS
                         DirectoryAuthApi.Outcome.SERVER_ERROR -> SyncSignInResult.Outcome.SERVER_ERROR
-                    }
+                    },
+                    // Carried through so the modal can say WHICH network problem it
+                    // was. Without it every failure reads as one shrug.
+                    detail = it.detail,
                 )
             }
         },

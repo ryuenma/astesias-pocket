@@ -74,6 +74,9 @@ fun BoxWithConstraintsScope.SyncServerModal(
     var password by remember(stateKey) { mutableStateOf("") }
     var working by remember(stateKey) { mutableStateOf(false) }
     var failure by remember(stateKey) { mutableStateOf<SyncSignInResult.Outcome?>(null) }
+    // Kept apart from the outcome so the headline stays a stable string resource and
+    // the specifics can change with the failure.
+    var failureDetail by remember(stateKey) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     // A screen that survives a rotation must not restore a password into a text
@@ -82,6 +85,7 @@ fun BoxWithConstraintsScope.SyncServerModal(
         if (!visible) {
             password = ""
             failure = null
+            failureDetail = null
         }
     }
 
@@ -89,16 +93,26 @@ fun BoxWithConstraintsScope.SyncServerModal(
         if (working || url.isBlank() || email.isBlank() || password.isBlank()) return
         working = true
         failure = null
+        failureDetail = null
         val secret = password
         password = ""
         scope.launch {
             val result = try {
                 onSignIn(url.trim(), email.trim(), secret)
             } catch (e: Exception) {
-                SyncSignInResult(SyncSignInResult.Outcome.UNREACHABLE)
+                // Was a bare UNREACHABLE, so a throw from anywhere in the sign-in
+                // chain produced the same unexplained shrug as a genuine network
+                // failure. Name it: this is the last place a cause can be lost.
+                SyncSignInResult(
+                    SyncSignInResult.Outcome.UNREACHABLE,
+                    "${e::class.java.simpleName}: ${e.message ?: "sign-in failed"}",
+                )
             }
             working = false
-            if (result.succeeded) dismiss() else failure = result.outcome
+            if (result.succeeded) dismiss() else {
+                failure = result.outcome
+                failureDetail = result.detail
+            }
         }
     }
 
@@ -188,6 +202,19 @@ fun BoxWithConstraintsScope.SyncServerModal(
                     fontWeight = FontWeight.Medium
                 )
             )
+            // The four outcomes are a summary, and the summary was not enough to
+            // act on: a typo in the host, a dead route and an untrusted certificate
+            // all arrive as UNREACHABLE and need three different fixes. So the
+            // specific cause is shown underneath rather than left in a log nobody
+            // can see.
+            failureDetail?.takeIf { failure != null }?.let { detail ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                    text = detail,
+                    style = UI.typo.nC.style(color = UI.colors.red)
+                )
+            }
         }
 
         if (currentProfile != null) {
@@ -225,7 +252,15 @@ fun BoxWithConstraintsScope.SyncServerModal(
  * Deliberately a separate type from the data layer's result so this legacy UI
  * module stays free of the networking types.
  */
-data class SyncSignInResult(val outcome: SyncSignInResult.Outcome) {
+data class SyncSignInResult(
+    val outcome: SyncSignInResult.Outcome,
+    /**
+     * WHY it failed, when the data layer could say. Shown under the generic
+     * message rather than instead of it, so the headline stays stable and the
+     * detail is the part that actually tells the owner what to change.
+     */
+    val detail: String? = null,
+) {
     enum class Outcome { SUCCESS, UNREACHABLE, BAD_CREDENTIALS, SERVER_ERROR }
     val succeeded: Boolean get() = outcome == Outcome.SUCCESS
 }
