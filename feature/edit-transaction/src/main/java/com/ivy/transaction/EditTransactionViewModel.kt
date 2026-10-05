@@ -990,8 +990,27 @@ class EditTransactionViewModel @Inject constructor(
         return true
     }
 
+    /**
+     * A transfer needs SOMEWHERE to go. It is not required to be one of my own
+     * accounts.
+     *
+     * This checked only [toAccount], which is the LOCAL destination, and that made
+     * the save unreachable for the feature it was supposed to allow: a
+     * cross-profile transfer has toAccount null BY DESIGN, because the destination
+     * account lives in the other person's database and cannot exist here. Choosing
+     * one from the published directory filled [toDirectoryAccount], which nothing
+     * looked at, so the form rendered a complete, correct transfer and then refused
+     * to save it with "Select the transfer destination" - while a destination was
+     * displayed directly above the button.
+     *
+     * Either destination is a destination. `TransactionMapper` already handles the
+     * null-local-account case for a cross-profile transfer, falling back to the
+     * source asset rather than inventing a rate, so nothing downstream needs a
+     * local account and this check was the only thing standing in the way.
+     */
     private fun hasNotChosenAccountToTransfer(): Boolean {
-        return transactionType == TransactionType.TRANSFER && toAccount == null
+        return transactionType == TransactionType.TRANSFER &&
+            toAccount == null && toDirectoryAccount == null
     }
 
     private fun hasChosenSameSourceAndDestinationAccountToTransfer(): Boolean {
