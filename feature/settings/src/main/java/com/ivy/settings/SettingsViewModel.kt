@@ -14,7 +14,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.viewModelScope
 import com.ivy.base.legacy.SharedPrefs
+import com.ivy.base.threading.DispatchersProvider
 import com.ivy.data.sync.DirectoryAuthApi
+import com.ivy.data.sync.DirectorySyncRepository
 import com.ivy.data.sync.SyncConfig
 import com.ivy.base.legacy.Theme
 import com.ivy.base.legacy.refreshWidget
@@ -46,7 +48,9 @@ import com.ivy.wallet.domain.deprecated.logic.notification.TransactionReminderLo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -59,6 +63,7 @@ class SettingsViewModel @Inject constructor(
     private val logoutLogic: LogoutLogic,
     private val sharedPrefs: SharedPrefs,
     private val syncConfig: SyncConfig,
+    private val directorySync: DirectorySyncRepository,
     private val pendingTransferRepository: PendingTransferRepository,
     private val transferConfirmationRepository: TransferConfirmationRepository,
     private val backupDataUseCase: BackupDataUseCase,
@@ -72,6 +77,7 @@ class SettingsViewModel @Inject constructor(
     private val exportXlsxUseCase: ExportXlsxUseCase,
     private val permissionGate: NotificationPermissionGate,
     private val transactionReminderLogic: TransactionReminderLogic,
+    private val dispatchersProvider: DispatchersProvider,
     @ApplicationContext private val context: Context
 ) : ComposeViewModel<SettingsState, SettingsEvent>() {
 
@@ -354,15 +360,34 @@ class SettingsViewModel @Inject constructor(
      * The password is used once over the wire and never persisted; only the
      * server's token and the resolved profile id are kept.
      *
-     * @return the profile id on success, null on failure. The modal shows one
-     *   message rather than pretending to know whether the address, the
-     *   credentials, or an unreachable host was the wrong one.
+     * On success this ALSO publishes this device's accounts, because that is
+     * the first moment a profileId exists and the server's `createRule` refuses
+     * any body whose `profileId` is not this device's own. Without it the other
+     * phone's transfer picker stays empty for an owner who connected but never
+     * happened to create an account afterwards.
+     *
+     * Best-effort and off the caller's critical path: the account is already
+     * saved locally, so a publish that fails or is slow must not delay or fail
+     * a sign-in that actually worked. Failures are logged; [SyncConfig] has
+     * already stored the credentials by the time this runs.
+     *
+     * @return the result, so the modal can name the actual failure rather than
+     *   shrugging at "could not connect".
      */
     suspend fun signInToSync(
         baseUrl: String,
         email: String,
         password: String
-    ): DirectoryAuthApi.Result = syncConfig.signIn(baseUrl, email, password)
+    ): DirectoryAuthApi.Result {
+        val result = syncConfig.signIn(baseUrl, email, password)
+        if (result.outcome == DirectoryAuthApi.Outcome.SUCCESS) {
+            withContext(NonCancellable + dispatchersProvider.io) {
+                runCatching { directorySync.publishLocalAccounts() }
+                    .onFailure { Timber.e(it, "Signed in, but publishing accounts failed") }
+            }
+        }
+        return result
+    }
 
     fun disconnectSync() {
         syncConfig.clear()

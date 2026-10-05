@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ivy.base.legacy.SharedPrefs
 import com.ivy.data.repository.CurrencyRepository
+import com.ivy.data.sync.DirectorySyncRepository
 import com.ivy.domain.usecase.exchange.SyncExchangeRatesUseCase
 import com.ivy.frp.test.TestIdlingResource
 import com.ivy.legacy.IvyWalletCtx
@@ -27,6 +28,7 @@ class MainViewModel @Inject constructor(
     private val accountCreator: AccountCreator,
     private val sharedPrefs: SharedPrefs,
     private val currencyRepository: CurrencyRepository,
+    private val directorySync: DirectorySyncRepository,
 ) : ViewModel() {
 
     private val _currency = MutableLiveData<String>()
@@ -56,6 +58,19 @@ class MainViewModel @Inject constructor(
                 // Sync exchange rates
                 syncExchangeRatesUseCase.sync(baseCurrency)
             }
+
+            // Publish this device's accounts on every app start.
+            //
+            // This is the hook that makes the feature work for an EXISTING
+            // install: such a device already has accounts and a stored token,
+            // but will never sign in again and may never touch an account
+            // again either, so without a start-time pass its accounts are never
+            // published and the other phone's picker stays permanently empty.
+            //
+            // Reconciles rather than blindly creating, so an unchanged install
+            // costs zero writes, and it is NOT inside `ioThread` with the
+            // exchange rates because it must not delay that.
+            directorySync.publishLocalAccounts()
 
             TestIdlingResource.decrement()
         }

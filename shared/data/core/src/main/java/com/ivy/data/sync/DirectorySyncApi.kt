@@ -9,8 +9,11 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
@@ -21,12 +24,29 @@ import timber.log.Timber
 /**
  * Talks to the PocketBase sync server.
  *
- * Only the two read paths the transfer picker depends on are implemented here.
- * Writing a paired transfer is deliberately NOT here yet: it has to land
- * atomically with the local leg, and doing that from a network client is how
- * you end up with money moved on one phone and never on the other.
+ * ## Both directions of the account directory
  *
- * Every method returns null on failure rather than throwing. Sync is a
+ * Reading (`fetchDirectory`) and publishing (`publishAccount`,
+ * `updateAccount`) live here together because they are one resource: a device
+ * reads every profile's accounts to populate the transfer picker, and publishes
+ * its OWN so the other device can do the same. Publishing only existed on the
+ * read side, which is why the picker said "No other profiles yet" forever -
+ * the collection was never written by anything.
+ *
+ * What is deliberately NOT here is a paired TRANSFER write. That has to land
+ * atomically with the local leg, and doing it from a network client is how you
+ * end up with money moved on one phone and never on the other. See
+ * [TransferSyncApi], which is queued for exactly that reason.
+ *
+ * ## Why `publishAccount` returns a result type rather than `Unit?`
+ *
+ * The server holds a unique index on (profileId, localAccountId), so
+ * re-publishing an unchanged account is refused. That refusal is a SUCCESS: the
+ * row exists and the other phone already sees it. Collapsing "already there"
+ * and "we do not know" into the same null is how a publish loop either retries
+ * forever or - worse - reports a published account that was never published.
+ *
+ * Every read still returns null on failure rather than throwing. Sync is a
  * background nicety - a transfer the owner already made must still be
  * recordable when the server is down.
  */
@@ -54,13 +74,69 @@ class DirectorySyncApi @Inject constructor(
      * string because it crosses the wire as text. It is parsed back into a
      * UUID by the caller, and a row whose id will not parse is dropped rather
      * than guessed at.
+     *
+     * [recordId] is PocketBase's own per-record id, and it is NOT
+     * [localAccountId]. It is the only handle that can address the row for an
+     * update, and it is a server-generated opaque string, which is exactly why
+     * it never reaches the local database: the read path keys everything on the
+     * owner's local id, and a server id that changed under a restore would
+     * silently point at the wrong row.
      */
     @Serializable
     data class RemoteDirectoryAccount(
+        @SerialName("id") val recordId: String = "",
         @SerialName("localAccountId") val localAccountId: String = "",
         @SerialName("profileId") val profileId: String = "",
         @SerialName("accountName") val accountName: String = "",
         @SerialName("currency") val currency: String = "",
+    )
+
+    /**
+     * What one publish attempt achieved.
+     *
+     * Three cases, and the second one is the load-bearing one: see the class
+     * doc. [AlreadyPublished] is a success because the unique index refusing a
+     * create proves exactly one correct row exists on the server.
+     */
+    sealed interface PublishResult {
+        /** The server took the row. */
+        data object Accepted : PublishResult
+
+        /**
+         * The server already holds this (profileId, localAccountId).
+         *
+         * A SUCCESS. It means the index refused the create precisely because
+         * one correct record exists, which is the state the publish wanted.
+         * Reporting it as a failure would retry a create the server will refuse
+         * identically on every attempt.
+         */
+        data object AlreadyPublished : PublishResult
+
+        /**
+         * We do not know: unreachable, timed out, refused, or a 400 that is not
+         * the duplicate. Nothing is claimed to have been published.
+         */
+        data class Undelivered(val reason: String) : PublishResult
+    }
+
+    /**
+     * The create body.
+     *
+     * [profileId] is THIS device's own id from [SyncConfig] and is never a
+     * parameter: the server's `createRule` is
+     * `@request.auth.profileId = @request.body.profileId`, so a body carrying
+     * anyone else's id is rejected - and if the rule were ever loosened, a
+     * client that could name another profile would let a compromised token
+     * inject a fake account belonging to the other person into their real
+     * transfer picker. Reading it from config is what makes that unrepresentable
+     * rather than merely discouraged.
+     */
+    @Serializable
+    data class DirectoryAccountRequest(
+        @SerialName("localAccountId") val localAccountId: String,
+        @SerialName("accountName") val accountName: String,
+        @SerialName("currency") val currency: String,
+        @SerialName("profileId") val profileId: String,
     )
 
     private val client: HttpClient by lazy {
@@ -91,6 +167,84 @@ class DirectorySyncApi @Inject constructor(
     suspend fun fetchDirectory(): PbList<RemoteDirectoryAccount>? =
         get("/api/collections/directory_accounts/records")
 
+    // ---------------------------------------------------------------------
+    // Publishing
+    // ---------------------------------------------------------------------
+
+    /**
+     * Publish one of THIS device's own accounts.
+     *
+     * [localAccountId] is the account's own Room id as text - the same string
+     * the read path parses back into a UUID. The server never sees an id it can
+     * resolve on its own, and does not need to: the receiving device resolves
+     * the name locally.
+     *
+     * Never throws. Returns [PublishResult.AlreadyPublished] rather than
+     * failing when the unique index refuses a re-publish, which is what makes
+     * it safe to call this on every account change and on every app start.
+     */
+    suspend fun publishAccount(
+        localAccountId: String,
+        accountName: String,
+        currency: String,
+    ): PublishResult {
+        val profileId = config.profileId ?: run {
+            Timber.i("No sync profile; not publishing $localAccountId")
+            return PublishResult.Undelivered("not configured")
+        }
+        val body = DirectoryAccountRequest(
+            localAccountId = localAccountId,
+            accountName = accountName,
+            // The server's `currency` field is required and rejects a blank
+            // string, so a nameless/curless account is published with the
+            // caller's resolved fallback rather than rejected outright.
+            currency = currency.ifBlank { FALLBACK_CURRENCY },
+            profileId = profileId,
+        )
+        return post("/api/collections/directory_accounts/records", body, "directory $localAccountId")
+    }
+
+    /**
+     * Rename/re-currency a row this device already published.
+     *
+     * PocketBase addresses records by their server-side id, which is NOT the
+     * local account id - so the caller has to have learned it from a previous
+     * create or from [fetchDirectory], which returns it as
+     * [RemoteDirectoryAccount.recordId].
+     * Republishing instead would hit the unique index and change nothing, so a
+     * rename has to go through here or not at all.
+     *
+     * The server's `updateRule` is `@request.auth.profileId = profileId`, so
+     * this may only ever touch this device's own rows.
+     */
+    suspend fun updateAccount(
+        recordId: String,
+        accountName: String,
+        currency: String,
+    ): PublishResult {
+        if (recordId.isBlank()) {
+            // No server id means we cannot address the row, and posting instead
+            // would be refused by the unique index. Claiming success would make
+            // a rename that never happened look done.
+            Timber.w("No directory record id; cannot update account")
+            return PublishResult.Undelivered("no record id")
+        }
+        val body = DirectoryAccountRequest(
+            localAccountId = "",
+            accountName = accountName,
+            currency = currency.ifBlank { FALLBACK_CURRENCY },
+            // Present but irrelevant to an update: the row's profileId is what
+            // the rule checks, and the server rejects a body that tries to move
+            // a row between profiles.
+            profileId = config.profileId.orEmpty(),
+        )
+        return patch(
+            "/api/collections/directory_accounts/records/$recordId",
+            body,
+            "directory record $recordId",
+        )
+    }
+
     private suspend inline fun <reified T> get(path: String): T? {
         val base = config.baseUrl ?: run {
             Timber.i("Sync not configured; skipping $path")
@@ -116,4 +270,123 @@ class DirectorySyncApi @Inject constructor(
             null
         }
     }
+
+    /**
+     * One write path for POST and PATCH, because they fail identically and the
+     * difference is the verb alone.
+     *
+     * Reads the failure body as TEXT rather than decoding it: a 400 is not the
+     * shape we asked for, and decoding it to find out why would throw inside
+     * the error path.
+     */
+    private suspend fun write(
+        method: HttpMethod,
+        path: String,
+        body: DirectoryAccountRequest,
+        what: String,
+    ): PublishResult {
+        val base = config.baseUrl ?: run {
+            Timber.i("Sync not configured; $what not published")
+            return PublishResult.Undelivered("not configured")
+        }
+        val token = config.authToken ?: run {
+            Timber.i("No sync token; $what not published")
+            return PublishResult.Undelivered("no token")
+        }
+        return try {
+            val response = client.request(base + path) {
+                this.method = method
+                header("Authorization", token)
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            val text = runCatching { response.body<String>() }.getOrNull()
+            val result = classify(response.status, text)
+            if (result is PublishResult.Undelivered) {
+                Timber.w("Sync $method $path failed: ${result.reason}")
+            } else {
+                Timber.i("Sync $method $path: $result")
+            }
+            result
+        } catch (e: Exception) {
+            // Never propagates. The account is already saved locally and the
+            // next publish will try again; an exception here would take down
+            // whatever coroutine happened to be saving an account.
+            Timber.e(e, "Sync $method $path threw")
+            PublishResult.Undelivered(e.javaClass.simpleName)
+        }
+    }
+
+    private suspend fun post(
+        path: String,
+        body: DirectoryAccountRequest,
+        what: String,
+    ): PublishResult = write(HttpMethod.Post, path, body, what)
+
+    private suspend fun patch(
+        path: String,
+        body: DirectoryAccountRequest,
+        what: String,
+    ): PublishResult = write(HttpMethod.Patch, path, body, what)
+
+    companion object {
+        /**
+         * What a published account carries when its own currency is blank.
+         *
+         * The server marks `currency` required, and PocketBase rejects a blank
+         * string on a required text field as readily as a missing one - so
+         * omitting it fails the create for a reason that has nothing to do with
+         * the account. "IDR" is the fallback because this app is Indonesian and
+         * that is the overwhelmingly common real case; the alternative,
+         * dropping the account from the directory entirely, hides a real
+         * account from the other phone's picker.
+         */
+        const val FALLBACK_CURRENCY = "IDR"
+
+        /**
+         * The one place a directory publish outcome is decided, so the rule is
+         * stated once and is testable exhaustively without standing up a server.
+         *
+         * Pure policy over a status code and a body, which is the part that has
+         * to be right for responses no server returns on a normal day.
+         */
+        fun classify(status: HttpStatusCode, body: String?): PublishResult = when {
+            status == HttpStatusCode.OK || status == HttpStatusCode.Created ->
+                PublishResult.Accepted
+
+            // 400 from PocketBase on a create is a failed validation, and the
+            // ONLY unique constraint on this collection is
+            // idx_directory_owner_local (profileId, localAccountId). So this is
+            // the duplicate re-publish - and it is a success, because it proves
+            // one correct row exists. Only honoured when the body actually says
+            // so; see `mentionsDuplicate`.
+            status == HttpStatusCode.BadRequest && body.mentionsDuplicate() ->
+                PublishResult.AlreadyPublished
+
+            status == HttpStatusCode.Conflict -> PublishResult.AlreadyPublished
+
+            else -> PublishResult.Undelivered("HTTP $status")
+        }
+    }
 }
+
+/**
+ * Whether a failure body is the unique-constraint rejection.
+ *
+ * PocketBase answers a duplicate create with HTTP 400 and a body naming the
+ * field, e.g. `{"data":{"profileId":{"code":"validation_invalid_unique"}}}`.
+ * The check is deliberately loose on the surrounding JSON and strict on the one
+ * token that matters: a 400 that does NOT look like this is a genuine
+ * validation failure, and calling that "already published" would report an
+ * account as visible on the other phone when the server never stored it.
+ *
+ * `profileId` is the field named here because the index is on
+ * (profileId, localAccountId) and PocketBase names the indexed columns.
+ */
+private fun String?.mentionsDuplicate(): Boolean =
+    this != null &&
+        contains("validation_invalid_unique", ignoreCase = true) &&
+        (
+            contains("profileId", ignoreCase = true) ||
+                contains("localAccountId", ignoreCase = true)
+            )
