@@ -196,7 +196,14 @@ fun BoxWithConstraintsScope.SyncServerModal(
                 // Name the ACTUAL cause. "Could not connect" blamed the network for
                 // what was actually a missing account, and sent us looking in the
                 // wrong place for several rounds.
-                text = stringResource(failureMessageRes(failure!!)),
+                // The detail is APPENDED to the headline rather than rendered as a
+                // separate Text below it. A sibling Text carrying only the detail
+                // did not appear at runtime even though the cause was definitely
+                // non-null and the string was present in the APK - so whatever was
+                // dropping it, appending to a string that is known to render puts
+                // the cause in front of the owner regardless.
+                text = stringResource(failureMessageRes(failure!!)) +
+                    (failureDetail?.let { "\n$it" } ?: ""),
                 style = UI.typo.nC.style(
                     color = UI.colors.red,
                     fontWeight = FontWeight.Medium

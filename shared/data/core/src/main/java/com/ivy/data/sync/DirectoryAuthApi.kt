@@ -4,8 +4,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
@@ -95,6 +97,7 @@ object DirectoryAuthApi {
                     connectTimeoutMillis = 10_000
                     socketTimeoutMillis = 20_000
                 }
+            install(ContentNegotiation) { json() }
                 expectSuccess = false
             }
             val response = client.post("$baseUrl/api/collections/profiles/auth-with-password") {

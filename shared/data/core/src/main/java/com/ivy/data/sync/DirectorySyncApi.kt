@@ -6,8 +6,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
@@ -69,6 +71,7 @@ class DirectorySyncApi @Inject constructor(
                 connectTimeoutMillis = 10_000
                 socketTimeoutMillis = 15_000
             }
+            install(ContentNegotiation) { json() }
             expectSuccess = false
         }
     }
