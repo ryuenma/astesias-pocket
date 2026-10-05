@@ -551,4 +551,5 @@
     <string name="transfer_answer_accepted">Accepted</string>
     <string name="transfer_answer_declined">Declined</string>
     <string name="transfer_answers_waiting">%1$d answer(s) you haven\u2019t seen yet</string>
+    <string name="msg_transfer_save_failed">That transfer could not be saved. Nothing was recorded — please try again.</string>
 </resources>

@@ -793,6 +793,34 @@ class EditTransactionViewModel @Inject constructor(
                 loadedTransaction = loadedTransaction().copy(
                     accountId = account?.id ?: error("no accountId"),
                     toAccountId = toAccount?.id,
+                    // The one thing that lets a cross-profile transfer SAVE.
+                    //
+                    // `toAccountId` is null here because their account lives in their
+                    // own database and cannot exist in this one. TransactionMapper
+                    // refuses such a leg unless counterpartProfileId says whose
+                    // account it is - which is the right guard, since an ordinary
+                    // transfer pointing at a missing account really is corrupt.
+                    //
+                    // Nothing set it, so every cross-profile save threw; the throw
+                    // was swallowed by the catch below; the screen closed as though
+                    // it had worked; and nothing was recorded. The mapper, the
+                    // sender-leg builder and the outbox all agreed with each other -
+                    // only the save path was never wired to them.
+                    counterpartProfileId = toDirectoryAccount?.profileId,
+                    // The one thing that makes a cross-profile transfer SAVE at all.
+                    //
+                    // `toAccountId` is null for a transfer to somebody else, because
+                    // their account lives in their own database and cannot exist here.
+                    // TransactionMapper then refuses the leg outright unless
+                    // counterpartProfileId names who the destination belongs to -
+                    // which is the correct guard, since an ordinary transfer pointing
+                    // at a missing account really is corrupt.
+                    //
+                    // Nothing set it, so every cross-profile save threw, the throw was
+                    // swallowed by the catch below, and the screen closed as though it
+                    // had worked. The mapper, the domain sender-leg builder and the
+                    // outbox all existed and agreed; only the save path was never
+                    // wired to them.
                     toAmount = customExchangeRateState.convertedAmount?.toBigDecimal()
                         ?: amount,
                     title = title?.trim(),
@@ -850,7 +878,27 @@ class EditTransactionViewModel @Inject constructor(
                 closeScreen()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            // Swallowed into a bare printStackTrace, which is how a cross-profile
+            // transfer could fail every single time and the UI close as if it had
+            // saved. `printStackTrace` goes to stderr and is invisible on a device.
+            //
+            // Timber reaches logcat in debug builds, and the message names the cause
+            // because "the transfer vanished" is not diagnosable from the outside.
+            Timber.e(e, "Saving transaction failed; nothing was written")
+            showSaveFailure()
+        }
+    }
+
+    /**
+     * Tell the owner the save FAILED, rather than closing over a lost transaction.
+     *
+     * The money has already moved, so a silent failure here is the worst possible
+     * outcome: the ledger says it was never recorded, and the ledger is what they
+     * will believe.
+     */
+    private fun showSaveFailure() {
+        viewModelScope.launch {
+            toaster.show(R.string.msg_transfer_save_failed)
         }
     }
 

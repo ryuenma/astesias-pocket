@@ -21,5 +21,10 @@ fun Transaction.toEntity(): TransactionEntity = TransactionEntity(
     loanRecordId = loanRecordId,
     id = id,
     isSynced = isSynced,
-    isDeleted = isDeleted
+    isDeleted = isDeleted,
+    // Carried so TransactionMapper can tell "this transfer points at an account in
+    // somebody ELSE's ledger, and here is who owns it" apart from "this transfer
+    // points at an account that does not exist". Those two are indistinguishable
+    // without it, and the second must stay an error.
+    counterpartProfileId = counterpartProfileId,
 )

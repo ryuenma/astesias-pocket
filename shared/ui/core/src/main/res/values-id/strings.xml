@@ -498,4 +498,5 @@
     <string name="transfer_answer_accepted">Diterima</string>
     <string name="transfer_answer_declined">Ditolak</string>
     <string name="transfer_answers_waiting">%1$d jawaban yang belum kamu lihat</string>
+    <string name="msg_transfer_save_failed">Transfer itu gagal disimpan. Tidak ada yang tercatat — coba lagi.</string>
 </resources>
