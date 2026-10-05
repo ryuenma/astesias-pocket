@@ -12,6 +12,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 
 /**
@@ -97,7 +98,14 @@ object DirectoryAuthApi {
                     connectTimeoutMillis = 10_000
                     socketTimeoutMillis = 20_000
                 }
-            install(ContentNegotiation) { json() }
+            install(ContentNegotiation) {
+                // PocketBase returns an ENTIRE auth record inside `record` -
+                // collectionId, email, verified and a dozen more - and
+                // kotlinx.serialization refuses unknown keys by default. Being
+                // strict about a server's own envelope is how a perfectly good
+                // 200 becomes a JsonConvertException.
+                json(Json { ignoreUnknownKeys = true })
+            }
                 expectSuccess = false
             }
             val response = client.post("$baseUrl/api/collections/profiles/auth-with-password") {

@@ -15,6 +15,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -145,7 +146,14 @@ class TransferSyncApi @Inject constructor(
                 connectTimeoutMillis = 10_000
                 socketTimeoutMillis = 15_000
             }
-            install(ContentNegotiation) { json() }
+            install(ContentNegotiation) {
+                // PocketBase returns an ENTIRE auth record inside `record` -
+                // collectionId, email, verified and a dozen more - and
+                // kotlinx.serialization refuses unknown keys by default. Being
+                // strict about a server's own envelope is how a perfectly good
+                // 200 becomes a JsonConvertException.
+                json(Json { ignoreUnknownKeys = true })
+            }
             expectSuccess = false
         }
     }
