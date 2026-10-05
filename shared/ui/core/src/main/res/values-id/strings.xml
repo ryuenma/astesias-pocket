@@ -492,4 +492,10 @@
     <string name="bill_reminder_no_day">Tanpa pengingat bulanan</string>
     <string name="bill_reminder_dismiss">Abaikan</string>
     <string name="bill_reminder_mark_paid">Tandai sudah dibayar</string>
+    <string name="transfer_answers_title">Transfer terkirim</string>
+    <string name="transfer_answers_description">Apa yang diputuskan pasangan atas transfer yang kamu kirim.</string>
+    <string name="no_transfer_answers">Belum ada jawaban</string>
+    <string name="transfer_answer_accepted">Diterima</string>
+    <string name="transfer_answer_declined">Ditolak</string>
+    <string name="transfer_answers_waiting">%1$d jawaban yang belum kamu lihat</string>
 </resources>

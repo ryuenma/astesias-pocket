@@ -27,6 +27,7 @@ import com.ivy.domain.usecase.csv.ExportCsvUseCase
 import com.ivy.domain.usecase.xlsx.ExportXlsxUseCase
 import com.ivy.domain.usecase.exchange.SyncExchangeRatesUseCase
 import com.ivy.domain.usecase.transfer.PendingTransferRepository
+import com.ivy.domain.usecase.transfer.TransferConfirmationRepository
 import com.ivy.frp.monad.Res
 import com.ivy.legacy.IvyWalletCtx
 import com.ivy.legacy.LogoutLogic
@@ -59,6 +60,7 @@ class SettingsViewModel @Inject constructor(
     private val sharedPrefs: SharedPrefs,
     private val syncConfig: SyncConfig,
     private val pendingTransferRepository: PendingTransferRepository,
+    private val transferConfirmationRepository: TransferConfirmationRepository,
     private val backupDataUseCase: BackupDataUseCase,
     private val startDayOfMonthAct: StartDayOfMonthAct,
     private val updateStartDayOfMonthAct: UpdateStartDayOfMonthAct,
@@ -91,6 +93,14 @@ class SettingsViewModel @Inject constructor(
     /** Incoming transfers awaiting her decision. Drives the Settings row badge. */
     private val pendingTransfersCount = mutableIntStateOf(0)
 
+    /**
+     * Answers about transfers she sent that she has not read.
+     *
+     * Durable rather than fetched here, so the badge survives the sync that
+     * learned the answer finishing after this screen was built.
+     */
+    private val unacknowledgedAnswersCount = mutableIntStateOf(0)
+
     @Composable
     override fun uiState(): SettingsState {
         LaunchedEffect(Unit) {
@@ -114,6 +124,7 @@ class SettingsViewModel @Inject constructor(
             notificationsBlocked = getNotificationsBlocked(),
             notificationsPermanentlyDenied = getNotificationsPermanentlyDenied(),
             pendingTransfersCount = pendingTransfersCount.value,
+            unacknowledgedAnswersCount = unacknowledgedAnswersCount.value,
         )
     }
 
@@ -128,6 +139,7 @@ class SettingsViewModel @Inject constructor(
         initializeTransfersAsIncomeExpense()
         initializeStartDateOfMonth()
         refreshPendingTransfersCount()
+        refreshUnacknowledgedAnswersCount()
     }
 
     /**
@@ -144,6 +156,27 @@ class SettingsViewModel @Inject constructor(
         }.getOrElse { error ->
             Timber.e(error, "Could not count pending transfers")
             pendingTransfersCount.intValue
+        }
+    }
+
+    /**
+     * Counts the partner's answers she has not opened.
+     *
+     * Read fresh on every entry rather than cached, for the same reason the
+     * pending count is: this number exists to tell her that money she sent has
+     * been answered, and a stale zero is worse than no row at all.
+     *
+     * The sync itself deliberately does NOT run here. Opening Settings must not
+     * depend on a network round-trip, and an answer learned by a background sync
+     * will still be counted the next time she comes back - which is the property
+     * that makes the persisted answer worth having in the first place.
+     */
+    private suspend fun refreshUnacknowledgedAnswersCount() {
+        unacknowledgedAnswersCount.intValue = runCatching {
+            transferConfirmationRepository.unacknowledgedCount()
+        }.getOrElse { error ->
+            Timber.e(error, "Could not count unacknowledged transfer answers")
+            unacknowledgedAnswersCount.intValue
         }
     }
 

@@ -101,6 +101,23 @@ data object PendingTransfersScreen : Screen {
         get() = true
 }
 
+/**
+ * What the partner answered about the transfers this device sent.
+ *
+ * The other half of [PendingTransfersScreen]. That one is her inbox - money
+ * arriving that she has to accept; this one is the outcome of money she already
+ * sent, which until now was fetched and discarded.
+ *
+ * Reachable from Settings, badge and all, because the case it covers is "I sent
+ * money and never found out whether it landed". A badge the owner has to go and
+ * look for is the only way to deliver that news at all, because the sync that
+ * learns the answer usually happens when she is not looking.
+ */
+data object TransferAnswersScreen : Screen {
+    override val isLegacy: Boolean
+        get() = true
+}
+
 data object ReportScreen : Screen {
     override val isLegacy: Boolean
         get() = true

@@ -227,6 +227,21 @@ class TransferOutboxRepository @Inject constructor(
         dao.findState(correlationId) != null
 
     /**
+     * The retained queue row for this transfer, or null when this device never
+     * queued one.
+     *
+     * [isOwnEvent] answers a yes/no question, which is all the inbound event
+     * pull needs. This returns the row so a caller can also ask WHICH kind of row
+     * it is, which the answer pull genuinely needs: this device retains both
+     * TRANSFER_EVENT rows (money it sent) and CONFIRMATION rows (answers it
+     * gave), and an incoming confirmation that matches a CONFIRMATION row is
+     * about somebody else's transfer - recording it would tell the owner her own
+     * answer was news about her money.
+     */
+    suspend fun ownEvent(correlationId: UUID): TransferOutboxEntity? =
+        dao.findByCorrelationId(correlationId)
+
+    /**
      * One publish attempt for one row.
      *
      * A block body rather than an expression because the two early exits below

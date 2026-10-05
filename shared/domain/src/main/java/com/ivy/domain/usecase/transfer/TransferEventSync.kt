@@ -45,6 +45,7 @@ class TransferEventSync @Inject constructor(
     private val profilesApi: DirectorySyncApi,
     private val outbox: TransferOutboxRepository,
     private val pendingTransfers: PendingTransferRepository,
+    private val answers: TransferConfirmationRepository,
     private val accounts: AccountDao,
     private val config: SyncConfig,
 ) {
@@ -130,21 +131,31 @@ class TransferEventSync @Inject constructor(
      * Pulls her answers back, for an owner who wants to know whether the money
      * she sent actually arrived on the other phone.
      *
+     * ## It used to return a list, and that list went nowhere
+     *
+     * The list is still not returned, because returning it was the bug. This
+     * method read every confirmation off the server and handed the caller a
+     * `List<RemoteConfirmation>` to discard, so the owner of the money never
+     * learned whether the partner had accepted it: the answer was fetched,
+     * decoded and dropped on every sync. Nothing durable, nothing visible, and
+     * no error, because discarding a value is not a failure.
+     *
+     * Now it persists. [TransferConfirmationRepository] decides which answers
+     * concern transfers this device sent, writes them under the same correlation
+     * id the transfer already has, and reports what it did - so the answer
+     * survives the sync that delivered it and is readable afterwards.
+     *
      * The owner's ledger is NOT rewritten by anything here. Her leg stands as
      * recorded regardless of what she decides, because the money already left -
      * see [TransferInbox.Decision.touchesLedger] for the full argument. What
-     * this returns is knowledge, not a write.
+     * comes back is knowledge, not a write.
+     *
+     * @return what arrived, described rather than listed. The list lives in the
+     *   database now, which is the point: an answer that only ever exists in
+     *   memory is an answer that is gone.
      */
-    suspend fun pullConfirmations(): List<TransferSyncApi.RemoteConfirmation> {
-        if (!config.isConfigured) return emptyList()
-        return runCatching { api.fetchConfirmations() }
-            .getOrElse { error ->
-                Timber.e(error, "Could not read transfer confirmations")
-                null
-            }
-            ?.items
-            .orEmpty()
-    }
+    suspend fun pullConfirmations(): TransferConfirmationRepository.AnswerPullResult =
+        answers.pullAnswers()
 
     /**
      * One remote event, resolved against this device and offered to the inbox.

@@ -40,6 +40,8 @@ class TransferEventSyncTest {
     private val herAccount = UUID.fromString("22222222-2222-4222-8222-222222222222")
     private val correlationId = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 
+    private val answers: TransferConfirmationRepository = mockk(relaxed = true)
+
     private val pendingTransfers = PendingTransferRepository(pendingDao, transactionDao)
 
     private fun sync() = TransferEventSync(
@@ -47,6 +49,7 @@ class TransferEventSyncTest {
         profilesApi = profilesApi,
         outbox = outbox,
         pendingTransfers = pendingTransfers,
+        answers = answers,
         accounts = accounts,
         config = config,
     )
@@ -377,34 +380,55 @@ class TransferEventSyncTest {
     }
 
     @Test
-    fun `confirmations are returned without touching the ledger`() = runTest {
-        // The owner's leg is NOT rewritten by anything she decides. What comes
-        // back is knowledge, not a write.
-        coEvery { config.isConfigured } returns true
-        coEvery { api.fetchConfirmations() } returns TransferSyncApi.PbList(
-            listOf(
-                TransferSyncApi.RemoteConfirmation(
-                    correlationId = correlationId.toString(),
-                    decidedBy = "so",
-                    decision = "ACCEPTED",
-                )
-            ),
-            1,
+    fun `confirmations are PERSISTED by the answer repository rather than returned`() = runTest {
+        // This method used to hand back a List<RemoteConfirmation> that the
+        // caller discarded, which is the whole bug: the answer was fetched,
+        // decoded and thrown away on every sync. It now reports what the
+        // repository recorded, and returns no list at all - so there is nothing
+        // left to discard.
+        coEvery { answers.pullAnswers() } returns
+            TransferConfirmationRepository.AnswerPullResult.Pulled(
+                recorded = 1,
+                alreadyKnown = 0,
+                notOurs = 0,
+                unusable = 0,
+            )
+
+        val result = sync().pullConfirmations()
+
+        result shouldBe TransferConfirmationRepository.AnswerPullResult.Pulled(
+            recorded = 1,
+            alreadyKnown = 0,
+            notOurs = 0,
+            unusable = 0,
         )
+        coVerify(exactly = 1) { answers.pullAnswers() }
+    }
 
-        val decisions = sync().pullConfirmations()
+    @Test
+    fun `pulling confirmations NEVER touches the ledger`() = runTest {
+        // The owner's leg is NOT rewritten by anything she decides. Her money
+        // moved when she saved it, and the partner's answer is knowledge about
+        // that fact, never a write to it.
+        coEvery { answers.pullAnswers() } returns
+            TransferConfirmationRepository.AnswerPullResult.Unreachable
 
-        decisions.single().decision shouldBe "ACCEPTED"
+        sync().pullConfirmations()
+
         coVerify(exactly = 0) { transactionDao.save(any()) }
         coVerify(exactly = 0) { pendingDao.insertIfAbsent(any()) }
     }
 
     @Test
-    fun `confirmations are empty when sync is not configured`() = runTest {
-        coEvery { config.isConfigured } returns false
+    fun `an unconfigured device reports NotConfigured without reading the server`() = runTest {
+        // Delegated rather than re-decided here: the repository owns the
+        // isConfigured rule, and a second copy of it here could disagree with the
+        // first. Asserted on the RETURN, which is the part that must not lie.
+        coEvery { answers.pullAnswers() } returns
+            TransferConfirmationRepository.AnswerPullResult.NotConfigured
 
-        sync().pullConfirmations() shouldBe emptyList()
-        coVerify(exactly = 0) { api.fetchConfirmations() }
+        sync().pullConfirmations() shouldBe
+            TransferConfirmationRepository.AnswerPullResult.NotConfigured
     }
 
     @Test

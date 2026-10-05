@@ -45,4 +45,15 @@ data class SettingsState(
      * still exists, so the destination is discoverable before it is ever needed.
      */
     val pendingTransfersCount: Int = 0,
+    /**
+     * How many of the partner's answers to transfers she sent she has not read.
+     *
+     * The mirror of [pendingTransfersCount], and it earns the same reasoning: a
+     * count nobody can see is the same defect as an inbox nobody can open. This
+     * one is also the only thing that will ever tell her the partner accepted,
+     * because the sync that learns it usually runs while she is looking at a
+     * different screen - which is exactly why the answer is stored rather than
+     * toasted.
+     */
+    val unacknowledgedAnswersCount: Int = 0,
 )

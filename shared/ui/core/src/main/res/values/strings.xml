@@ -545,4 +545,10 @@
     <string name="bill_reminder_no_day">No monthly reminder</string>
     <string name="bill_reminder_dismiss">Dismiss</string>
     <string name="bill_reminder_mark_paid">Mark as paid</string>
+    <string name="transfer_answers_title">Sent transfers</string>
+    <string name="transfer_answers_description">What your partner decided about the transfers you sent.</string>
+    <string name="no_transfer_answers">No answers yet</string>
+    <string name="transfer_answer_accepted">Accepted</string>
+    <string name="transfer_answer_declined">Declined</string>
+    <string name="transfer_answers_waiting">%1$d answer(s) you haven\u2019t seen yet</string>
 </resources>

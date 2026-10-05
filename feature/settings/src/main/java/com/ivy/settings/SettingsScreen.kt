@@ -63,6 +63,7 @@ import com.ivy.navigation.FeaturesScreen
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.Navigation
 import com.ivy.navigation.PendingTransfersScreen
+import com.ivy.navigation.TransferAnswersScreen
 import com.ivy.data.sync.DirectoryAuthApi
 import com.ivy.data.sync.SyncConfig
 import com.ivy.navigation.navigation
@@ -110,6 +111,7 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         notificationsBlocked = uiState.notificationsBlocked,
         notificationsPermanentlyDenied = uiState.notificationsPermanentlyDenied,
         pendingTransfersCount = uiState.pendingTransfersCount,
+        unacknowledgedAnswersCount = uiState.unacknowledgedAnswersCount,
         hideCurrentBalance = uiState.hideCurrentBalance,
         hideIncome = uiState.hideIncome,
         progressState = uiState.progressState,
@@ -200,6 +202,7 @@ private fun BoxWithConstraintsScope.UI(
     notificationsBlocked: Boolean = false,
     notificationsPermanentlyDenied: Boolean = false,
     pendingTransfersCount: Int = 0,
+    unacknowledgedAnswersCount: Int = 0,
     hideCurrentBalance: Boolean = false,
     hideIncome: Boolean = false,
     progressState: Boolean = false,
@@ -302,6 +305,18 @@ private fun BoxWithConstraintsScope.UI(
                 pendingCount = pendingTransfersCount
             ) {
                 nav.navigateTo(PendingTransfersScreen)
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // The other direction of the same feature. Without it the owner
+            // sends money, hears nothing back, and has no way to tell "still
+            // waiting" from "declined and never told me" - which is exactly what
+            // used to happen, because the answer was fetched and discarded.
+            TransferAnswersRow(
+                unacknowledgedCount = unacknowledgedAnswersCount
+            ) {
+                nav.navigateTo(TransferAnswersScreen)
             }
 
 //            Spacer(Modifier.height(20.dp))
@@ -1107,6 +1122,86 @@ private fun PendingTransfersRow(
             },
             style = UI.typo.nC.style(
                 color = if (pendingCount > 0) UI.colors.green else UI.colors.gray
+            )
+        )
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/**
+ * Settings row for what the partner answered about transfers she sent.
+ *
+ * The mirror of [PendingTransfersRow], and built the same way on purpose: always
+ * present, never conditional on there being something to show, so the destination
+ * is findable before it is ever needed. Zero reads as "nothing new" rather than
+ * hiding the row, because a row that appears only when money has been answered
+ * is a row nobody learns to recognise.
+ *
+ * The badge is green for the same reason the inbox badge is - it counts something
+ * to read, not an error. A declined answer is still something she needs to see,
+ * so the count deliberately does not distinguish between the two.
+ */
+@Composable
+private fun TransferAnswersRow(
+    unacknowledgedCount: Int,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(UI.shapes.r2)
+            .background(UI.colors.medium, UI.shapes.r2)
+            .clickable { onClick() }
+    ) {
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_transfer_answers_row"),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(Modifier.width(24.dp))
+
+            Text(
+                text = stringResource(R.string.transfer_answers_title),
+                style = UI.typo.c.style(
+                    fontWeight = FontWeight.Black,
+                    color = UI.colors.gray
+                )
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            if (unacknowledgedCount > 0) {
+                // A badge, not just a colour change: the number is the fact, and
+                // colour alone leaves a screen-reader user with no way to learn
+                // that an answer is waiting.
+                Text(
+                    text = unacknowledgedCount.toString(),
+                    style = UI.typo.c.style(
+                        fontWeight = FontWeight.Black,
+                        color = UI.colors.green
+                    )
+                )
+
+                Spacer(Modifier.width(24.dp))
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            text = if (unacknowledgedCount > 0) {
+                stringResource(R.string.transfer_answers_waiting, unacknowledgedCount)
+            } else {
+                stringResource(R.string.no_transfer_answers)
+            },
+            style = UI.typo.nC.style(
+                color = if (unacknowledgedCount > 0) UI.colors.green else UI.colors.gray
             )
         )
 
