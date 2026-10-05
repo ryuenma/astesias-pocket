@@ -18,6 +18,7 @@ import com.ivy.data.db.dao.read.TransactionDao
 import com.ivy.data.db.dao.read.DirectoryAccountDao
 import com.ivy.data.db.dao.read.PendingBillDao
 import com.ivy.data.db.dao.read.PendingTransferDao
+import com.ivy.data.db.dao.read.TransferOutboxDao
 import com.ivy.data.db.dao.read.UserDao
 import com.ivy.data.db.dao.write.WriteAccountDao
 import com.ivy.data.db.dao.write.WriteBudgetDao
@@ -31,6 +32,7 @@ import com.ivy.data.db.dao.write.WriteSettingsDao
 import com.ivy.data.db.dao.write.WriteTagDao
 import com.ivy.data.db.dao.write.WriteTagAssociationDao
 import com.ivy.data.db.dao.write.WriteTransactionDao
+import com.ivy.data.db.dao.write.WriteTransferOutboxDao
 import com.ivy.data.db.entity.AccountEntity
 import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.db.entity.PendingBillEntity
@@ -45,6 +47,7 @@ import com.ivy.data.db.entity.SettingsEntity
 import com.ivy.data.db.entity.TagEntity
 import com.ivy.data.db.entity.TagAssociationEntity
 import com.ivy.data.db.entity.TransactionEntity
+import com.ivy.data.db.entity.TransferOutboxEntity
 import com.ivy.data.db.entity.UserEntity
 import com.ivy.data.db.migration.Migration123to124_LoanIncludeDateTime
 import com.ivy.data.db.migration.Migration124to125_LoanEditDateTime
@@ -57,6 +60,7 @@ import com.ivy.data.db.migration.Migration131to132_CategorySubcategories
 import com.ivy.data.db.migration.Migration132to133_PendingTransfers
 import com.ivy.data.db.migration.Migration133to134_BillReminderDueDay
 import com.ivy.data.db.migration.Migration134to135_PendingBills
+import com.ivy.data.db.migration.Migration135to136_TransferOutbox
 import com.ivy.domain.db.RoomTypeConverters
 import com.ivy.domain.db.migration.Migration105to106_TrnRecurringRules
 import com.ivy.domain.db.migration.Migration106to107_Wishlist
@@ -87,6 +91,7 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
         LoanEntity::class, LoanRecordEntity::class, TagEntity::class, TagAssociationEntity::class,
         PendingTransferEntity::class,
         PendingBillEntity::class,
+        TransferOutboxEntity::class,
     ],
     autoMigrations = [
         AutoMigration(
@@ -95,7 +100,7 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
             spec = IvyRoomDatabase.DeleteSEMigration::class
         )
     ],
-    version = 135,
+    version = 136,
     exportSchema = true
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -129,6 +134,8 @@ abstract class IvyRoomDatabase : RoomDatabase() {
     abstract val directoryAccountDao: DirectoryAccountDao
     abstract val pendingTransferDao: PendingTransferDao
     abstract val pendingBillDao: PendingBillDao
+    abstract val transferOutboxDao: TransferOutboxDao
+    abstract val writeTransferOutboxDao: WriteTransferOutboxDao
 
     companion object {
         /**
@@ -168,7 +175,8 @@ abstract class IvyRoomDatabase : RoomDatabase() {
             Migration131to132_CategorySubcategories(),
             Migration132to133_PendingTransfers(),
             Migration133to134_BillReminderDueDay(),
-            Migration134to135_PendingBills()
+            Migration134to135_PendingBills(),
+            Migration135to136_TransferOutbox()
         )
 
         /**

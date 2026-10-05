@@ -243,6 +243,7 @@
     <ID>ClassNaming:Migration132to133_PendingTransfers.kt$Migration132to133_PendingTransfers : Migration</ID>
     <ID>ClassNaming:Migration133to134_BillReminderDueDay.kt$Migration133to134_BillReminderDueDay : Migration</ID>
     <ID>ClassNaming:Migration134to135_PendingBills.kt$Migration134to135_PendingBills : Migration</ID>
+    <ID>ClassNaming:Migration135to136_TransferOutbox.kt$Migration135to136_TransferOutbox : Migration</ID>
     <ID>ComplexCondition:EditTransactionViewModel.kt$EditTransactionViewModel$customExchangeRateState.value.showCard &amp;&amp; toAccCurrencyCode == customExchangeRateState.value.toCurrencyCode &amp;&amp; fromAccCurrencyCode == customExchangeRateState.value.fromCurrencyCode &amp;&amp; !resetRate</ID>
     <ID>ComplexCondition:Transactions.kt$(upcoming == null || upcoming.trns.isEmpty()) &amp;&amp; (overdue == null || overdue.trns.isEmpty()) &amp;&amp; history.isEmpty()</ID>
     <ID>ComposableNaming:Compose.kt$onEvent</ID>
@@ -2737,6 +2738,8 @@
     <ID>MagicNumber:Migration133to134_BillReminderDueDay.kt$Migration133to134_BillReminderDueDay$134</ID>
     <ID>MagicNumber:Migration134to135_PendingBills.kt$Migration134to135_PendingBills$134</ID>
     <ID>MagicNumber:Migration134to135_PendingBills.kt$Migration134to135_PendingBills$135</ID>
+    <ID>MagicNumber:Migration135to136_TransferOutbox.kt$Migration135to136_TransferOutbox$135</ID>
+    <ID>MagicNumber:Migration135to136_TransferOutbox.kt$Migration135to136_TransferOutbox$136</ID>
     <ID>MagicNumber:MigrationsManager.kt$MigrationsManager$2_000L</ID>
     <ID>MagicNumber:Month.kt$Month.Companion$10</ID>
     <ID>MagicNumber:Month.kt$Month.Companion$11</ID>
@@ -10146,6 +10149,11 @@
     <ID>ReturnCount:PlannedPaymentsLogic.kt$PlannedPaymentsLogic$private suspend fun amountForMonthInBaseCurrency( plannedPayment: PlannedPaymentRule, baseCurrency: String, accounts: List&lt;Account&gt; ): Double</ID>
     <ID>ReturnCount:ReportFilter.kt$ReportFilter$fun validate(): Boolean</ID>
     <ID>ReturnCount:SyncExchangeRatesAct.kt$SyncExchangeRatesAct$private suspend fun sync(baseCurrency: String)</ID>
+    <ID>ReturnCount:TransferEventSync.kt$TransferEventSync$private suspend fun deliver( event: TransferSyncApi.RemoteTransferEvent, names: Map&lt;String, String&gt;, ): Delivery</ID>
+    <ID>ReturnCount:TransferSyncApi.kt$TransferSyncApi$private suspend inline fun &lt;reified T&gt; get(path: String): T?</ID>
+    <ID>ReturnCount:TransferSyncApi.kt$TransferSyncApi$private suspend inline fun post(path: String, body: String, what: String): PublishResult</ID>
+    <ID>ReturnCount:TransferOutboxRepository.kt$TransferOutboxRepository$private suspend fun publish(row: TransferOutboxEntity): TransferSyncApi.PublishResult</ID>
+    <ID>ReturnCount:TransferEventSync.kt$TransferEventSync$suspend fun pullEvents(): PullResult</ID>
     <ID>SpreadOperator:UiText.kt$UiText$(resId, *args)</ID>
     <ID>TopLevelPropertyNaming:Accessors11xxvwy0y6zsdmgi5tg7sgrcq.kt$/** * Provides the existing [androidTestAnnotationProcessor][org.gradle.api.artifacts.Configuration] element. */ internal val org.gradle.api.NamedDomainObjectContainer&lt;org.gradle.api.artifacts.Configuration&gt;.`androidTestAnnotationProcessor`: NamedDomainObjectProvider&lt;org.gradle.api.artifacts.Configuration&gt; get() = named&lt;org.gradle.api.artifacts.Configuration&gt;("androidTestAnnotationProcessor")</ID>
     <ID>TopLevelPropertyNaming:Accessors12l04gyw3iri7cbpx1tj9yrz6.kt$/** * Provides the existing [release][org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet] element. */ internal val org.gradle.api.NamedDomainObjectContainer&lt;org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet&gt;.`release`: NamedDomainObjectProvider&lt;org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet&gt; get() = named&lt;org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet&gt;("release")</ID>

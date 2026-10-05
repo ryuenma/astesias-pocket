@@ -11,7 +11,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ivy.data.db.entity.PendingTransferEntity
+import com.ivy.data.db.entity.TransferOutboxEntity
+import com.ivy.data.sync.TransferOutboxRepository
 import com.ivy.domain.usecase.transfer.PendingTransferRepository
+import com.ivy.domain.usecase.transfer.TransferEventSync
 import com.ivy.domain.usecase.transfer.TransferInbox
 import com.ivy.navigation.PendingTransfersScreen
 import com.ivy.navigation.navigation
@@ -28,6 +31,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PendingTransfersViewModel @Inject constructor(
     private val repository: PendingTransferRepository,
+    private val eventSync: TransferEventSync,
+    private val outbox: TransferOutboxRepository,
 ) : ViewModel() {
 
     private val pending = mutableStateOf<ImmutableList<PendingTransferEntity>>(
@@ -46,6 +51,20 @@ class PendingTransfersViewModel @Inject constructor(
      */
     fun load() {
         viewModelScope.launch {
+            // Pull FIRST, then read. The other order would show a stale inbox and
+            // then silently correct it, which looks like the screen miscounted.
+            //
+            // Best-effort throughout: an unreachable server must still open this
+            // screen showing what was last known, because the whole point of it
+            // is to let her act on money that is already in flight.
+            runCatching { eventSync.pullEvents() }
+                .onFailure { Timber.e(it, "Could not pull transfer events") }
+
+            // And publish whatever this device still owes the server, so an
+            // answer given while offline reaches the other phone.
+            runCatching { outbox.drain() }
+                .onFailure { Timber.e(it, "Could not drain the transfer outbox") }
+
             pending.value = runCatching {
                 repository.pending().toImmutableList()
             }.getOrElse { error ->
@@ -66,7 +85,7 @@ class PendingTransfersViewModel @Inject constructor(
         action: TransferInbox.Action,
     ) {
         viewModelScope.launch {
-            runCatching {
+            val decision = runCatching {
                 repository.decide(
                     correlationId = entry.correlationId,
                     action = action,
@@ -82,7 +101,35 @@ class PendingTransfersViewModel @Inject constructor(
                 )
             }.onFailure {
                 Timber.e(it, "Could not apply $action to transfer ${entry.correlationId}")
+            }.getOrNull()
+
+            // Queue her answer ONLY when a decision was actually applied. A
+            // double-tap produces NoChange, and publishing from that path would
+            // let a second tap post an answer she never gave - or post DECLINED
+            // for a transfer she had already accepted, if two taps raced with
+            // different actions.
+            if (decision != null && decision != TransferInbox.Decision.NoChange) {
+                runCatching {
+                    outbox.enqueueConfirmation(
+                        correlationId = entry.correlationId,
+                        decision = when (decision) {
+                            TransferInbox.Decision.Accept ->
+                                TransferOutboxEntity.DECISION_ACCEPTED
+
+                            else -> TransferOutboxEntity.DECISION_DECLINED
+                        },
+                        enqueuedAt = System.currentTimeMillis(),
+                    )
+                    outbox.drain()
+                }.onFailure {
+                    // Her answer is already durable in `pending_transfers`; this
+                    // only delays the owner learning about it.
+                    Timber.e(it, "Could not publish the answer for ${entry.correlationId}")
+                }
             }
+
+            // Re-read rather than removing the row optimistically, so the list can
+            // never claim a decision the database refused.
             pending.value = repository.pending().toImmutableList()
         }
     }

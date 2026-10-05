@@ -28,6 +28,7 @@ import com.ivy.data.model.primitive.AssociationId
 import com.ivy.data.model.primitive.NotBlankTrimmedString
 import com.ivy.data.profile.DirectoryRepository
 import com.ivy.data.sync.DirectorySyncRepository
+import com.ivy.domain.usecase.transfer.CrossProfileTransferPublisher
 import com.ivy.data.profile.ProfileId
 import com.ivy.data.repository.CategoryRepository
 import com.ivy.data.repository.TagRepository
@@ -103,6 +104,7 @@ class EditTransactionViewModel @Inject constructor(
     private val toaster: Toaster,
     private val directoryRepository: DirectoryRepository,
     private val directorySync: DirectorySyncRepository,
+    private val transferPublisher: CrossProfileTransferPublisher,
     private val loanDao: LoanDao,
     private val settingsDao: SettingsDao,
     private val nav: Navigation,
@@ -827,8 +829,19 @@ class EditTransactionViewModel @Inject constructor(
                     accountsChanged = false
                 }
 
-                loadedTransaction().toDomain(transactionMapper)?.let {
+                val savedLeg = loadedTransaction().toDomain(transactionMapper)?.let {
                     transactionRepo.save(it)
+                    it
+                }
+
+                // AFTER the ledger write, never before, and never instead of it.
+                // The money has already moved by the time she taps save, so a
+                // transfer that waited on the network to be recorded would be a
+                // lie about money that is gone. Queuing is a local insert; the
+                // POST happens after, and a failure there leaves the row queued
+                // rather than losing the transfer.
+                if (savedLeg != null) {
+                    publishCrossProfileTransferIfNeeded(savedLeg)
                 }
 
             }
@@ -839,6 +852,88 @@ class EditTransactionViewModel @Inject constructor(
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    /**
+     * Queues a transfer that went to somebody ELSE's account for publication.
+     *
+     * Ordinary transfers - between two of my own accounts - are not published:
+     * the counterpart's phone has no record of either account, so there is
+     * nothing it could do with them.
+     *
+     * The correlation id is the leg's own id, which makes it stable: re-saving,
+     * editing or retrying this transfer produces the SAME id, so the outbox's
+     * primary key refuses the second queue and the server's unique index refuses
+     * the second POST. One transfer, one id, however many times the save path
+     * runs.
+     *
+     * A known limitation, stated rather than hidden: the domain mapper has no
+     * field to carry `linkedTransactionId` out to `transactions`, so the leg
+     * itself is written without it and the join key lives only in the transport.
+     * That is a gap in `TransactionMapper`, not in this path, and it does not
+     * affect correctness here - the receiver gets the id over the wire and keys
+     * her own leg on it.
+     */
+    /**
+     * Queues a transfer that went to somebody ELSE's account for publication.
+     *
+     * Ordinary transfers - between two of my own accounts - are not published:
+     * the counterpart's phone has no record of either account, so there is
+     * nothing it could do with them. The directory destination is what makes a
+     * transfer cross-profile, which is exactly the condition the wire contract
+     * needs.
+     *
+     * The correlation id is the leg's own id, which makes it stable: re-saving,
+     * editing or retrying this transfer produces the SAME id, so the outbox's
+     * primary key refuses the second queue and the server's unique index refuses
+     * the second POST. One transfer, one id, however many times this runs.
+     *
+     * A known limitation, stated rather than hidden: the domain mapper has no
+     * field for `linkedTransactionId`, so the leg itself is written without it
+     * and the join key lives only in the transport. That is a gap in
+     * `TransactionMapper`, not in this path - the receiver gets the id over the
+     * wire and keys her own leg on it.
+     */
+    /**
+     * Whether this save is editing a transaction rather than recording one.
+     *
+     * Editing is not a new payment. Re-publishing on every keystroke of an edit
+     * would be one transfer recorded as many as the user typed.
+     */
+    private fun isEditingExistingTransaction(): Boolean = editMode
+
+    private suspend fun publishCrossProfileTransferIfNeeded(leg: com.ivy.data.model.Transaction) {
+        // Two gates rather than one long chain, because these are not six
+        // independent failures: they are six faces of one question - "is this a
+        // transfer to somebody else that the other phone has not been told
+        // about?" - and the shape of the form decides that first.
+        if (transactionType != TransactionType.TRANSFER || isEditingExistingTransaction()) return
+
+        val destination = toDirectoryAccount
+        val fromAccount = account
+        // Only a Transfer carries the money, and only fromValue is what left. The
+        // sealed type makes that a compile-time check rather than a runtime one.
+        val transfer = leg as? com.ivy.data.model.Transfer
+        if (destination == null || fromAccount == null || transfer == null) return
+
+        // The currency published is the one the money actually LEFT in. These two
+        // accounts may hold different currencies and the rate is unknown, so the
+        // counterpart is told what was sent rather than a figure we invented -
+        // see `CrossProfileTransfer.senderLeg`, which leaves toAmount null for
+        // the same reason.
+        //
+        // A null currency is not invented either: the server field is required,
+        // and a blank one would be refused and retried forever.
+        val fromCurrency = fromAccount.currency ?: return
+
+        transferPublisher.publishRecorded(
+            correlationId = leg.id.value,
+            fromAccountName = fromAccount.name,
+            toAccountName = destination.name,
+            amount = transfer.fromValue.amount.value,
+            currency = fromCurrency,
+            occurredOn = transfer.time,
+        )
     }
 
     @JvmName("setHasChangesMethod")

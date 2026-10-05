@@ -10,6 +10,7 @@ import com.ivy.data.db.dao.read.CategoryDao
 import com.ivy.data.db.dao.read.DirectoryAccountDao
 import com.ivy.data.db.dao.read.PendingBillDao
 import com.ivy.data.db.dao.read.PendingTransferDao
+import com.ivy.data.db.dao.read.TransferOutboxDao
 import com.ivy.data.db.dao.read.ExchangeRatesDao
 import com.ivy.data.db.dao.read.LoanDao
 import com.ivy.data.db.dao.read.LoanRecordDao
@@ -31,6 +32,7 @@ import com.ivy.data.db.dao.write.WriteSettingsDao
 import com.ivy.data.db.dao.write.WriteTagAssociationDao
 import com.ivy.data.db.dao.write.WriteTagDao
 import com.ivy.data.db.dao.write.WriteTransactionDao
+import com.ivy.data.db.dao.write.WriteTransferOutboxDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -144,6 +146,16 @@ object RoomDbModule {
     @Provides
     fun provideWritePendingBillDao(db: IvyRoomDatabase): WritePendingBillDao {
         return db.writePendingBillDao
+    }
+
+    @Provides
+    fun provideTransferOutboxDao(db: IvyRoomDatabase): TransferOutboxDao {
+        return db.transferOutboxDao
+    }
+
+    @Provides
+    fun provideWriteTransferOutboxDao(db: IvyRoomDatabase): WriteTransferOutboxDao {
+        return db.writeTransferOutboxDao
     }
 
     @Provides
