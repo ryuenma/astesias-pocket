@@ -8,6 +8,7 @@ import com.ivy.data.db.dao.read.AccountDao
 import com.ivy.data.db.dao.read.BudgetDao
 import com.ivy.data.db.dao.read.CategoryDao
 import com.ivy.data.db.dao.read.DirectoryAccountDao
+import com.ivy.data.db.dao.read.PendingBillDao
 import com.ivy.data.db.dao.read.PendingTransferDao
 import com.ivy.data.db.dao.read.ExchangeRatesDao
 import com.ivy.data.db.dao.read.LoanDao
@@ -24,6 +25,7 @@ import com.ivy.data.db.dao.write.WriteCategoryDao
 import com.ivy.data.db.dao.write.WriteExchangeRatesDao
 import com.ivy.data.db.dao.write.WriteLoanDao
 import com.ivy.data.db.dao.write.WriteLoanRecordDao
+import com.ivy.data.db.dao.write.WritePendingBillDao
 import com.ivy.data.db.dao.write.WritePlannedPaymentRuleDao
 import com.ivy.data.db.dao.write.WriteSettingsDao
 import com.ivy.data.db.dao.write.WriteTagAssociationDao
@@ -132,6 +134,16 @@ object RoomDbModule {
     @Provides
     fun providePendingTransferDao(db: IvyRoomDatabase): PendingTransferDao {
         return db.pendingTransferDao
+    }
+
+    @Provides
+    fun providePendingBillDao(db: IvyRoomDatabase): PendingBillDao {
+        return db.pendingBillDao
+    }
+
+    @Provides
+    fun provideWritePendingBillDao(db: IvyRoomDatabase): WritePendingBillDao {
+        return db.writePendingBillDao
     }
 
     @Provides
