@@ -75,14 +75,32 @@ fun BoxScope.DirectoryAccountPicker(
         if (accounts.isEmpty()) {
             EmptyDirectory()
         } else {
-            LazyColumn {
+            // A bounded height, and the reason is not cosmetic.
+            //
+            // IvyModal puts its content in a verticallyScrollable Column and this
+            // file used to add a `Spacer(Modifier.height(400.dp))` "scroll hack"
+            // after the list to fake bottom padding. Inside a scrollable parent the
+            // child's height constraint is infinite, and a LazyColumn measured with
+            // an infinite maximum height throws:
+            //
+            //   IllegalStateException: Vertically scrollable component was
+            //   measured with an infinity maximum height constraints
+            //
+            // That killed the whole process the instant the picker opened, which is
+            // why opening it silently closed the app. Two nested vertical
+            // scrollers is the actual mistake: the modal scrolls, so the list
+            // inside it must not also want to scroll without a bound.
+            //
+            // So: a real, finite height, and no fake spacer. The two spacer lines
+            // that used to follow the list in this file were removed deliberately.
+            LazyColumn(
+                modifier = Modifier.height(320.dp),
+            ) {
                 items(accounts, key = { it.accountId.toString() }) { entry ->
                     DirectoryAccountRow(entry = entry, onClick = { onSelect(entry) })
                 }
             }
         }
-
-        Spacer(Modifier.height(400.dp)) // scroll hack, matches the sibling modals
     }
 }
 
