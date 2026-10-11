@@ -15,67 +15,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * The owner's side of a mirrored transfer: what the counterpart ANSWERED.
+ * Answers arriving about transfers WE sent: the counterpart accepted or declined.
  *
- * ## Why this class exists
- *
- * Because the answer was being thrown away. `TransferSyncApi.pullConfirmations`
- * read every confirmation on the server and handed the list to a caller that
- * discarded it, so the person who sent the money never learned it landed. The
- * leg left her account the instant she tapped save and that was always durable -
- * what was missing was the one fact that made the payment complete.
- *
- * [TransferEventSync] owns the other direction (events arriving for HER inbox);
- * this owns this one (answers arriving about HER transfers). They are separate
- * because they are separate tables with separate rules, and folding them
- * together is how "our own answer comes back and is recorded as the partner's"
- * becomes possible.
- *
- * ## The load-bearing rule: only record answers about transfers WE recorded
- *
- * Two independent checks, because either alone has a hole.
- *
- * The server lets both profiles read every confirmation, so this device
- * necessarily sees the answer the OWNER published herself coming back in the same
- * feed. Recording it would tell her the partner accepted a transfer she had
- * already accepted - a fact about money that is false, sourced from a real row.
- * [TransferOutboxRepository.isOwnEvent] plus the `kind` check close that: an
- * answer is only recorded when the retained outbox row for that correlation id
- * is an EVENT, meaning this device is the one that sent the transfer.
- *
- * That second half is the part worth being careful about. This device also
- * retains outbox rows of kind CONFIRMATION - the answers SHE gave about
- * transfers that arrived. Those are not her transfers, so an answer matching one
- * of those keys belongs to somebody else's transfer and must not be shown as
- * news about money she sent.
- *
- * ## Why the answer is persisted rather than shown as a snackbar
- *
- * Because a snackbar is only evidence if she happens to be looking at the
- * screen at the moment the sync completes, which for a background sync is most
- * of the time. "Your transfer was accepted" that she never saw is not
- * information. A row is: it survives the app being closed, survives a drain,
- * survives the queue being emptied, and is still there next month when she
- * opens Settings and asks what happened to the money she sent on the 5th.
- *
- * That is also why [TransferConfirmationEntity.acknowledged] exists. Without
- * it, persistence would be a list she has to remember to re-read; with it, the
- * unacknowledged count is a truthful answer to "is there anything I have not
- * looked at yet".
- *
- * ## It never writes to the ledger
- *
- * Not one row here touches `transactions`. The money already left her account
- * when she saved it, and the counterpart accepting or declining it does not
- * retroactively change that - see [TransferInbox.Decision.touchesLedger] for the
- * argument in full. What this class writes is knowledge about a fact, never the
- * fact itself.
- *
- * ## Never throws
- *
- * Every method returns a description of what happened. The counterpart's answer
- * is the least valuable thing on the device to lose in a stack trace, and this
- * runs inside background syncs nobody is watching.
+ * Only recorded when the retained outbox row is kind EVENT, so the owner's own
+ * answer coming back in the shared feed is never shown as news about money she
+ * sent. Persisted, never a `transactions` write, never throws. Full reasoning:
+ * docs/decisions/sync-design.md
  */
 @Singleton
 class TransferConfirmationRepository @Inject constructor(

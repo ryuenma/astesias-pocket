@@ -12,43 +12,10 @@ import javax.inject.Singleton
 /**
  * The outbox: writes the transport queue and drains it to the server.
  *
- * ## The rule this class exists to enforce
- *
- * **The local leg is never blocked on the network.** Nothing here is called on
- * the path that records the owner's transfer; the leg is written to
- * `transactions` unconditionally and this queue is what makes that safe. The
- * money has moved by the time any of this could run, so a POST that fails, times
- * out or never happens must not be able to un-record it, delay it, or report it
- * as failed. Every method here returns a value describing what happened and
- * never throws, for the same reason: the drain runs in a coroutine nobody is
- * watching, and an exception escaping it would take down whatever background job
- * happened to be hosting it.
- *
- * ## Why a queue and not a POST inside the save
- *
- * Because the two orders fail differently.
- *
- * POST inside the save: the owner taps save, the request goes out, it times out
- * on a train, and now she has either a transfer that was recorded and reported
- * as failed, or an error dialog about money that genuinely left her account. She
- * has no way to tell which, and retrying risks the duplicate this whole design
- * exists to prevent.
- *
- * Write the leg, queue the row, drain later: the ledger is correct the instant
- * she taps save regardless of the server, and the queue is a durable record of
- * exactly what still has to be said. The worst case is a transfer that shows up
- * on the other phone a minute late. The alternative worst case is a transfer
- * she cannot record.
- *
- * ## Idempotency is enforced twice, on purpose
- *
- * Once here, by `correlationId` being the queue's primary key, so one transfer
- * is enqueued once. Once on the server, by its unique index on the same key, so
- * even if this device somehow posted twice the second is refused. Both are
- * needed: the local key closes the window between two in-flight enqueues, which
- * no application-level check can, and the server key closes the window between
- * a request that landed and a response that was dropped in transit - the one the
- * client genuinely cannot observe.
+ * The local leg is NEVER blocked on the network - the transfer is written to
+ * `transactions` unconditionally and this queue is what makes that safe. Every
+ * method returns what happened and never throws, because the drain runs in a
+ * coroutine nobody is watching. Full reasoning: docs/decisions/sync-design.md
  */
 @Singleton
 class TransferOutboxRepository @Inject constructor(

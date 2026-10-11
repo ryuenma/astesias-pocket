@@ -47,20 +47,11 @@ data class Transaction(
     val isDeleted: Boolean = false,
 
     /**
-     * Whose account the money went to, when that account is NOT in this ledger.
-     *
-     * A cross-profile transfer names a destination that lives in the other
-     * person's database, so `toAccountId` is null BY DESIGN and
-     * `TransactionMapper` refuses the leg unless this names who owns it. Without
-     * it every cross-profile save threw, and because the save was wrapped in a
-     * catch that swallowed the exception, the screen closed as though it had worked
-     * and nothing was recorded.
-     *
-     * Null for an ordinary transfer, and that null is meaningful: it is what
-     * preserves the original strictness for a transfer pointing at an account that
-     * genuinely is missing.
+     * Whose account the money went to, when that account is NOT in this ledger:
+     * a cross-profile transfer has `toAccountId` null BY DESIGN and
+     * TransactionMapper refuses the leg unless this names the owner. Null for an
+     * ordinary transfer, which is what preserves that check's strictness.
      */
-    @Suppress("DataClassDefaultValues")
     val counterpartProfileId: String? = null,
 
     @Suppress("DataClassDefaultValues")

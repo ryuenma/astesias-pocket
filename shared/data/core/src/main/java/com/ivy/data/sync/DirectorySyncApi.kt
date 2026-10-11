@@ -22,33 +22,12 @@ import kotlinx.serialization.json.Json
 import timber.log.Timber
 
 /**
- * Talks to the PocketBase sync server.
+ * Talks to the PocketBase sync server: both directions of the account directory.
  *
- * ## Both directions of the account directory
- *
- * Reading (`fetchDirectory`) and publishing (`publishAccount`,
- * `updateAccount`) live here together because they are one resource: a device
- * reads every profile's accounts to populate the transfer picker, and publishes
- * its OWN so the other device can do the same. Publishing only existed on the
- * read side, which is why the picker said "No other profiles yet" forever -
- * the collection was never written by anything.
- *
- * What is deliberately NOT here is a paired TRANSFER write. That has to land
- * atomically with the local leg, and doing it from a network client is how you
- * end up with money moved on one phone and never on the other. See
- * [TransferSyncApi], which is queued for exactly that reason.
- *
- * ## Why `publishAccount` returns a result type rather than `Unit?`
- *
- * The server holds a unique index on (profileId, localAccountId), so
- * re-publishing an unchanged account is refused. That refusal is a SUCCESS: the
- * row exists and the other phone already sees it. Collapsing "already there"
- * and "we do not know" into the same null is how a publish loop either retries
- * forever or - worse - reports a published account that was never published.
- *
- * Every read still returns null on failure rather than throwing. Sync is a
- * background nicety - a transfer the owner already made must still be
- * recordable when the server is down.
+ * A re-publish of an unchanged account is refused by the server's unique index,
+ * and that refusal is a SUCCESS - hence a result type rather than `Unit?`. Reads
+ * return null on failure rather than throwing. Full reasoning:
+ * docs/decisions/sync-design.md
  */
 @Singleton
 class DirectorySyncApi @Inject constructor(

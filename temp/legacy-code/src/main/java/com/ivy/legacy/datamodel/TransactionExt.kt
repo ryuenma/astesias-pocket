@@ -22,9 +22,7 @@ fun Transaction.toEntity(): TransactionEntity = TransactionEntity(
     id = id,
     isSynced = isSynced,
     isDeleted = isDeleted,
-    // Carried so TransactionMapper can tell "this transfer points at an account in
-    // somebody ELSE's ledger, and here is who owns it" apart from "this transfer
-    // points at an account that does not exist". Those two are indistinguishable
-    // without it, and the second must stay an error.
+    // Lets TransactionMapper tell "destination is in somebody else's ledger"
+    // apart from "destination does not exist", which must stay an error.
     counterpartProfileId = counterpartProfileId,
 )

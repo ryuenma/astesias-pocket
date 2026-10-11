@@ -21,43 +21,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * The wire: publishes transfers and confirmations, and reads back what the
- * counterpart's phone wrote.
+ * The wire: publishes transfers and confirmations, reads back the counterpart's.
  *
- * ## Why this is separate from [DirectorySyncApi]
- *
- * Two reasons, and the first is the load-bearing one.
- *
- * A POST and a GET do not fail the same way. A failed GET is harmless - the
- * cache simply keeps what it had. A failed POST is not: the request may or may
- * not have landed, and the caller cannot tell. So a publish cannot be a
- * `T?` that is null on any error; it has to distinguish "the server accepted
- * this", "the server already had this" and "we do not know", because the first
- * two clear the queue row and the third must leave it queued. Collapsing all
- * three into null is how a transfer ends up permanently stuck in the queue, or
- * worse, published twice.
- *
- * The second reason is that this needs the SAME failure tolerance as the
- * directory but a different one in the timing. [DirectorySyncApi] is allowed to
- * do nothing when sync is unconfigured. This is too - the local leg is already
- * written by the time any of this runs, and the queue row is what makes that
- * safe - but it must never THROW, because the drain runs in a coroutine that
- * nobody is watching.
- *
- * ## The three outcomes, and why the middle one is a success
- *
- * [PublishResult] has three cases, not two. `ALREADY_PUBLISHED` is a success:
- * the server rejected the POST because its unique index on `correlationId`
- * already holds this transfer, which means exactly one record exists and it is
- * the right one. That is the idempotency guarantee working. Treating it as a
- * failure would leave the row queued forever, retrying against a server that
- * will refuse it identically on every attempt - the transfer is on the other
- * phone and this device insists it is not.
- *
- * This is the exact shape of the bug that has already bitten this project: a
- * PocketBase collection with `unique: true` and no index behind it accepted a
- * replayed POST and wrote a second row. With a real index the replay is
- * refused, and refusing it must be understood as "already done".
+ * A publish must distinguish "accepted" / "already had this" / "we do not know" -
+ * the first two clear the queue row, the third must leave it queued. Never
+ * throws. Full reasoning: docs/decisions/sync-design.md
  */
 @Singleton
 class TransferSyncApi @Inject constructor(
