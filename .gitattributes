@@ -1,0 +1,39 @@
+# Normalize line endings so a diff shows the change, not the file.
+#
+# Without this, the index stores whatever the writer happened to produce. This
+# repo has 1535 files stored with LF but checked out as CRLF (i/lf w/crlf) and 19
+# stored with CRLF, so the same edit renders as a 370-line rewrite in one file and
+# a 4-line change in another depending on which editor touched it. That is how a
+# 73-line fix reported as 2415 lines changed - nothing was wrong with the content,
+# the diff was simply unreadable.
+#
+# * text=auto  - git stores LF, checks out native (CRLF here). This is what every
+#                other Git project on Windows already relies on, and it is why
+#                core.autocrlf is deliberately left alone rather than set here.
+# * -text / binary - leave these alone. They are binary or must round-trip byte
+#                for byte; normalizing them corrupts them.
+
+* text=auto
+
+# Binary and byte-exact files.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.pdf     binary
+*.zip      binary
+*.jar     binary
+*.aar     binary
+*.keystore binary
+*.jks     binary
+*.so      binary
+*.ttf     binary
+*.otf     binary
+*.woff    binary
+*.woff2   binary
+
+# Scripts must stay LF: they run under bash/MSYS and a CRLF shebang fails with
+# "bad interpreter: No such file or directory".
+*.sh      text eol=lf
