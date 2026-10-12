@@ -48,6 +48,49 @@ class DirectorySyncApiClassifyTest {
     }
 
     @Test
+    fun `the LIVE server's duplicate body is recognised`() {
+        // THE regression test for the code-string miss. Verbatim, measured
+        // against https://astesias-pb.fly.dev on 2026-10-13 by posting the same
+        // (profileId, localAccountId) twice. Note the code:
+        // `validation_not_unique`, NOT `validation_invalid_unique` - the old
+        // check looked only for the latter, which is what a field-level
+        // `unique: true` produces, and this server has no field-level unique
+        // (they are silently ignored on 0.40, so uniqueness is real SQL in the
+        // `indexes` array). So the check never fired at all: a re-publish the
+        // server already held came back Undelivered("HTTP 400") and counted as
+        // undelivered on every sync, forever, while its row sat correct on the
+        // server.
+        val liveBody = """{"data":{"localAccountId":{"code":"validation_not_unique",""" +
+            """"message":"Value must be unique."},"profileId":{"code":""" +
+            """"validation_not_unique","message":"Value must be unique."}},""" +
+            """"message":"Failed to create record.","status":400}"""
+
+        DirectorySyncApi.classify(HttpStatusCode.BadRequest, liveBody) shouldBe
+            DirectorySyncApi.PublishResult.AlreadyPublished
+    }
+
+    @Test
+    fun `a unique rejection naming only ONE indexed column is still a duplicate`() {
+        // PocketBase names whichever column its query touched; on the live
+        // server both were named, but a composite index may surface one. The
+        // field check is an OR for exactly this reason.
+        val oneColumn =
+            """{"data":{"localAccountId":{"code":"validation_not_unique"}}}"""
+
+        DirectorySyncApi.classify(HttpStatusCode.BadRequest, oneColumn) shouldBe
+            DirectorySyncApi.PublishResult.AlreadyPublished
+    }
+
+    @Test
+    fun `the field-level unique code is still recognised`() {
+        // A PocketBase upgrade or a future `unique: true` would emit the other
+        // string. Being strict about a code the server does not currently emit
+        // protects nothing, so both are accepted.
+        DirectorySyncApi.classify(HttpStatusCode.BadRequest, duplicateBody) shouldBe
+            DirectorySyncApi.PublishResult.AlreadyPublished
+    }
+
+    @Test
     fun `409 is also an already-published duplicate`() {
         DirectorySyncApi.classify(HttpStatusCode.Conflict, null) shouldBe
             DirectorySyncApi.PublishResult.AlreadyPublished

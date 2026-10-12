@@ -50,6 +50,38 @@ class TransferSyncApiClassifyTest {
     }
 
     @Test
+    fun `the LIVE server's replay body is recognised`() {
+        // THE regression test for the code-string miss, and the money-critical
+        // one. Verbatim, measured against https://astesias-pb.fly.dev on
+        // 2026-10-13 by POSTing the same correlationId twice: HTTP 400 with
+        // `{"data":{"correlationId":{"code":"validation_not_unique",...}}}` and
+        // exactly one row left behind - the index did its job.
+        //
+        // `validation_invalid_unique`, which the old check looked for, is what a
+        // field-level `unique: true` produces, and this project has none (they
+        // are silently ignored on 0.40; uniqueness is real SQL in the `indexes`
+        // array). So the check never fired: a replay whose response was dropped
+        // was classified Undelivered("HTTP 400 ") and retried FOREVER on a
+        // transfer that was already on the other phone, with a lastError that
+        // reads exactly like the card this came from.
+        val liveBody = """{"data":{"correlationId":{"code":"validation_not_unique",""" +
+            """"message":"Value must be unique."}},"message":"Failed to create """ +
+            """record.","status":400}"""
+
+        TransferSyncApi.classify(HttpStatusCode.BadRequest, liveBody) shouldBe
+            TransferSyncApi.PublishResult.AlreadyPublished
+    }
+
+    @Test
+    fun `the field-level unique code is still recognised`() {
+        // A PocketBase upgrade or a future `unique: true` would emit the other
+        // string. Being strict about a code the server does not currently emit
+        // protects nothing and costs the ledger its retry, so both are accepted.
+        TransferSyncApi.classify(HttpStatusCode.BadRequest, duplicateBody) shouldBe
+            TransferSyncApi.PublishResult.AlreadyPublished
+    }
+
+    @Test
     fun `409 is also an already-published duplicate`() {
         TransferSyncApi.classify(HttpStatusCode.Conflict, null) shouldBe
             TransferSyncApi.PublishResult.AlreadyPublished
@@ -77,9 +109,14 @@ class TransferSyncApiClassifyTest {
 
     @Test
     fun `a 400 naming some other field is not a duplicate`() {
+        // Both code strings are accepted now (see the LIVE body test), so the
+        // FIELD is what still separates a replay from a real validation
+        // failure. This is the assertion that keeps that true: a unique refusal
+        // on some other column is not this index, and reading it as "already
+        // sent" would silently discard a transfer that never arrived.
         TransferSyncApi.classify(
             HttpStatusCode.BadRequest,
-            """{"data":{"recordedBy":{"code":"validation_invalid_unique"}}}""",
+            """{"data":{"recordedBy":{"code":"validation_not_unique"}}}""",
         ) shouldBe TransferSyncApi.PublishResult.Undelivered("HTTP 400 Bad Request")
     }
 

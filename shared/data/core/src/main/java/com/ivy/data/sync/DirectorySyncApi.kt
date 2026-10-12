@@ -400,19 +400,42 @@ class DirectorySyncApi @Inject constructor(
 /**
  * Whether a failure body is the unique-constraint rejection.
  *
- * PocketBase answers a duplicate create with HTTP 400 and a body naming the
- * field, e.g. `{"data":{"profileId":{"code":"validation_invalid_unique"}}}`.
- * The check is deliberately loose on the surrounding JSON and strict on the one
- * token that matters: a 400 that does NOT look like this is a genuine
- * validation failure, and calling that "already published" would report an
- * account as visible on the other phone when the server never stored it.
+ * ## The code is `validation_not_unique`, and the difference matters
  *
- * `profileId` is the field named here because the index is on
- * (profileId, localAccountId) and PocketBase names the indexed columns.
+ * Measured against the LIVE server 2026-10-13, a duplicate create on
+ * directory_accounts returns HTTP 400 with
+ * `{"data":{"localAccountId":{"code":"validation_not_unique","message":"Value
+ * must be unique."},"profileId":{"code":"validation_not_unique",...}}}`.
+ * `validation_invalid_unique` — the string this used to look for — is what
+ * PocketBase's *field-level* `unique: true` produces, and this project has no
+ * field-level unique: uniqueness is real SQL in the `indexes` array, because
+ * `unique: true` is silently ignored on 0.40. So the only unique rejection
+ * this server can ever emit is `validation_not_unique`, and looking for the
+ * other string meant the check never fired.
+ *
+ * The consequence was the exact failure this whole class exists to prevent: a
+ * re-publish of an account the server already holds was classified
+ * Undelivered("HTTP 400") instead of AlreadyPublished, so the account counted
+ * as undelivered on every sync, forever, while its row sat correct on the
+ * server. Both strings are accepted now because a PocketBase upgrade or a
+ * future field-level unique would produce the other one, and being strict
+ * about a code the server does not currently emit buys nothing.
+ *
+ * The check stays loose on the surrounding JSON and strict on the field: a 400
+ * that does NOT name an indexed column is a genuine validation failure, and
+ * calling that "already published" would report an account as visible on the
+ * other phone when the server never stored it.
+ *
+ * The field names are the index's own columns —
+ * idx_directory_owner_local is (profileId, localAccountId) — so a body naming
+ * some other collection's field is not this index refusing.
  */
 private fun String?.mentionsDuplicate(): Boolean =
     this != null &&
-        contains("validation_invalid_unique", ignoreCase = true) &&
+        (
+            contains("validation_not_unique", ignoreCase = true) ||
+                contains("validation_invalid_unique", ignoreCase = true)
+            ) &&
         (
             contains("profileId", ignoreCase = true) ||
                 contains("localAccountId", ignoreCase = true)
