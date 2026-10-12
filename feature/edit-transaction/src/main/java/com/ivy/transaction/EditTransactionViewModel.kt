@@ -17,6 +17,7 @@ import com.ivy.base.model.TransactionType
 import com.ivy.base.time.TimeConverter
 import com.ivy.base.time.TimeProvider
 import com.ivy.data.db.dao.read.LoanDao
+import com.ivy.data.db.dao.write.WriteTransactionDao
 import com.ivy.data.db.dao.read.SettingsDao
 import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.model.Category
@@ -28,6 +29,7 @@ import com.ivy.data.model.primitive.AssociationId
 import com.ivy.data.model.primitive.NotBlankTrimmedString
 import com.ivy.data.profile.DirectoryRepository
 import com.ivy.data.sync.DirectorySyncRepository
+import com.ivy.domain.usecase.transfer.CrossProfileTransfer
 import com.ivy.domain.usecase.transfer.CrossProfileTransferPublisher
 import com.ivy.data.profile.ProfileId
 import com.ivy.data.repository.CategoryRepository
@@ -105,6 +107,7 @@ class EditTransactionViewModel @Inject constructor(
     private val directoryRepository: DirectoryRepository,
     private val directorySync: DirectorySyncRepository,
     private val transferPublisher: CrossProfileTransferPublisher,
+    private val writeTransactionDao: WriteTransactionDao,
     private val loanDao: LoanDao,
     private val settingsDao: SettingsDao,
     private val nav: Navigation,
@@ -847,19 +850,57 @@ class EditTransactionViewModel @Inject constructor(
                     accountsChanged = false
                 }
 
-                val savedLeg = loadedTransaction().toDomain(transactionMapper)?.let {
-                    transactionRepo.save(it)
-                    it
-                }
+                // A cross-profile transfer CANNOT round-trip through the domain
+                // `Transaction`: `Transfer.toAccount` is a non-null `AccountId`, and
+                // this transfer's destination lives in her ledger, so there is no
+                // local id to give it. The mapper fails its either{} block,
+                // `toDomain(mapper).getOrNull()` turns that into null, and the `?.let`
+                // that used to stand here skipped the write entirely - nothing threw,
+                // nothing was caught, nothing was recorded. That is "Add works but the
+                // transaction is nowhere to be found".
+                //
+                // `CrossProfileTransfer.senderLeg` builds exactly this leg as a raw
+                // TransactionEntity, no domain model involved, with
+                // counterpartProfileId and the correlation id already set. Write it
+                // straight to the WriteTransactionDao, the same way the
+                // owner-confirmation path does.
+                val directoryDest = toDirectoryAccount
+                if (directoryDest != null) {
+                    val leg = CrossProfileTransfer.senderLeg(
+                        legId = UUID.randomUUID(),
+                        correlationId = UUID.randomUUID(),
+                        fromAccountId = account?.id ?: error("no accountId"),
+                        toAccountId = directoryDest.accountId,
+                        counterpartProfileId = directoryDest.profileId,
+                        amount = amount.toDouble(),
+                        dateTime = loadedTransaction().dateTime ?: timeProvider.utcNow(),
+                        title = title?.trim(),
+                        description = description?.trim(),
+                    )
+                    writeTransactionDao.save(leg)
 
-                // AFTER the ledger write, never before, and never instead of it.
-                // The money has already moved by the time she taps save, so a
-                // transfer that waited on the network to be recorded would be a
-                // lie about money that is gone. Queuing is a local insert; the
-                // POST happens after, and a failure there leaves the row queued
-                // rather than losing the transfer.
-                if (savedLeg != null) {
-                    publishCrossProfileTransferIfNeeded(savedLeg)
+                    // AFTER the ledger write, never before. The money has already
+                    // moved, so queuing must not gate recording it. publishRecorded
+                    // takes plain values, so it needs no domain Transfer.
+                    val fromCurrency = account?.currency
+                    if (fromCurrency != null) {
+                        transferPublisher.publishRecorded(
+                            correlationId = leg.linkedTransactionId ?: leg.id,
+                            fromAccountName = account?.name.orEmpty(),
+                            toAccountName = directoryDest.name,
+                            amount = leg.amount,
+                            currency = fromCurrency,
+                            occurredOn = leg.dateTime ?: timeProvider.utcNow(),
+                        )
+                    }
+                } else {
+                    // Ordinary transfer: the domain round-trip is correct here, and
+                    // its strictness (reject a genuinely missing local destination) is
+                    // exactly what we want.
+                    loadedTransaction().toDomain(transactionMapper)?.let {
+                        transactionRepo.save(it)
+                        publishCrossProfileTransferIfNeeded(it)
+                    }
                 }
 
             }
@@ -871,7 +912,7 @@ class EditTransactionViewModel @Inject constructor(
             // Was a bare printStackTrace, which goes to stderr and is nowhere on a
             // device - so this failed every time and the screen closed as if it had
             // saved. The money has already moved, so a silent failure here is the
-            // worst outcome this feature can produce.
+            // the worst outcome this feature can produce.
             Timber.e(e, "Saving transaction failed; nothing was written")
             viewModelScope.launch { toaster.show(R.string.msg_transfer_save_failed) }
         }
