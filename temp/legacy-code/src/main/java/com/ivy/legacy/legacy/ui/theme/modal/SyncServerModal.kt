@@ -54,6 +54,16 @@ fun BoxWithConstraintsScope.SyncServerModal(
     currentProfile: String?,
     dismiss: () -> Unit,
     id: UUID = UUID.randomUUID(),
+    /**
+     * True when the stored token has run out and cannot be renewed.
+     *
+     * This makes the modal show the sign-in form even though a profile id is
+     * stored, which is the whole point: `auth-refresh` refuses an
+     * already-expired token, so the password is the only way back. Without
+     * this the owner would open the modal, see "Connected as qa_a" and a
+     * Disconnect button, and have no field to type into.
+     */
+    tokenExpired: Boolean = false,
     onSignIn: suspend (baseUrl: String, email: String, password: String) -> SyncSignInResult,
     onDisconnect: () -> Unit,
 ) {
@@ -125,7 +135,12 @@ fun BoxWithConstraintsScope.SyncServerModal(
         PrimaryAction = {
             // Once connected there is no meaningful "save" - the honest control
             // is disconnect, which lives in the body instead.
-            if (currentProfile == null) {
+            //
+            // UNLESS the token has run out. Then the profile id is still stored
+            // but nothing can be sent with it, and a modal with no primary
+            // action offers the owner no way back. Signing in again is the only
+            // repair, so the form has to be reachable.
+            if (currentProfile == null || tokenExpired) {
                 ModalSave(enabled = canSubmit) {
                     attemptSignIn()
                 }
@@ -229,8 +244,19 @@ fun BoxWithConstraintsScope.SyncServerModal(
             Row(Modifier.fillMaxWidth()) {
                 Text(
                     modifier = Modifier.padding(horizontal = 32.dp),
-                    text = stringResource(R.string.sync_connected_as, currentProfile),
-                    style = UI.typo.nC.style(color = UI.colors.gray)
+                    text = when {
+                        // Say the true thing. "Connected as qa_a" while the token
+                        // is dead is what made this bug invisible for days: the
+                        // row looked healthy and no request could succeed.
+                        tokenExpired -> stringResource(
+                            R.string.sync_token_expired_modal,
+                            currentProfile,
+                        )
+                        else -> stringResource(R.string.sync_connected_as, currentProfile)
+                    },
+                    style = UI.typo.nC.style(
+                        color = if (tokenExpired) UI.colors.red else UI.colors.gray
+                    )
                 )
             }
             Spacer(Modifier.height(16.dp))

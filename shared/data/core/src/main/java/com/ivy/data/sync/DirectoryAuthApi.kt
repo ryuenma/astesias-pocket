@@ -5,6 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.serialization.kotlinx.json.json
@@ -140,6 +141,90 @@ object DirectoryAuthApi {
             }
         } catch (e: Exception) {
             Timber.e(e, "Sync sign-in threw")
+            Result(Outcome.UNREACHABLE, detail = describe(e, baseUrl))
+        } finally {
+            client?.close()
+        }
+    }
+
+    /**
+     * Turns a still-live token into a fresh one.
+     *
+     * WHY this exists and why it is not a fix on its own:
+     *
+     * Measured against the live server 2026-10-13, an ALREADY-EXPIRED token
+     * gets **HTTP 401 `"The request requires valid record authorization
+     * token."`** - so refreshing is not a repair, it is a renewal, and it only
+     * works while the old token still counts. The callers therefore use
+     * [SyncToken.isExpiringWithin] to renew EARLY rather than calling this
+     * after a refusal. A pairing that is never refreshed is a pairing that
+     * eventually needs the password again, and this cannot change that.
+     *
+     * The endpoint is a POST with an empty body and the token in
+     * `Authorization`; there is no request payload. A GET returns 404
+     * `"File not found."`, which is a trap worth naming because it reads like
+     * the route does not exist when in fact it does and only the verb is wrong.
+     *
+     * @return the outcome, never null. [Outcome.SUCCESS] carries the new
+     *   token in [Credentials]; note that the record comes back complete, so
+     *   the caller can confirm the profileId is unchanged rather than assuming.
+     */
+    suspend fun refresh(baseUrl: String, token: String): Result {
+        if (token.isBlank()) {
+            return Result(Outcome.BAD_CREDENTIALS, detail = "There is no token to refresh.")
+        }
+        var client: HttpClient? = null
+        return try {
+            client = HttpClient(OkHttp) {
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 20_000
+                    connectTimeoutMillis = 10_000
+                    socketTimeoutMillis = 20_000
+                }
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                expectSuccess = false
+            }
+            val response = client.post("$baseUrl/api/collections/profiles/auth-refresh") {
+                header("Authorization", token)
+                contentType(ContentType.Application.Json)
+                // An empty body. PocketBase's auth-refresh reads the caller's
+                // identity from the token and takes no fields at all.
+                setBody("{}")
+            }
+            if (response.status != HttpStatusCode.OK) {
+                Timber.w("Sync token refresh refused: HTTP ${response.status}")
+                return Result(
+                    // 401 here means the token was already past its exp - the
+                    // renewal came too late. That is the state the owner has to
+                    // act on, and it must not be dressed up as a network problem.
+                    outcome = when (response.status) {
+                        HttpStatusCode.Unauthorized, HttpStatusCode.BadRequest ->
+                            Outcome.BAD_CREDENTIALS
+                        else -> Outcome.SERVER_ERROR
+                    },
+                    httpStatus = response.status.value,
+                    detail = when (response.status) {
+                        HttpStatusCode.Unauthorized ->
+                            "This connection has expired and can no longer be renewed " +
+                                "automatically. Sign in again."
+                        else -> null
+                    },
+                )
+            }
+            val auth: AuthResponse = response.body()
+            if (auth.token.isBlank() || auth.record.profileId.isBlank()) {
+                Timber.w("Sync token refresh returned an incomplete profile")
+                Result(Outcome.SERVER_ERROR, httpStatus = response.status.value)
+            } else {
+                Result(
+                    Outcome.SUCCESS,
+                    Credentials(auth.token, auth.record.profileId, auth.record.displayName),
+                )
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Sync token refresh threw")
             Result(Outcome.UNREACHABLE, detail = describe(e, baseUrl))
         } finally {
             client?.close()

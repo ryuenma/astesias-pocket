@@ -78,6 +78,112 @@ class SyncConfig @Inject constructor(
         }
     }
 
+    /**
+     * Whether the stored token is still accepted, read from its own `exp`.
+     *
+     * Deliberately NOT a network call. An expired token is not a refusal the
+     * server has to make for us to know about: measured live 2026-10-13, a
+     * write with one is refused `400 {"data":{},"message":"Failed to create
+     * record."}` while a READ returns **HTTP 200 with `totalItems: 0`**. That
+     * second one is the dangerous signature - the directory refresh looks like
+     * it succeeded, the picker keeps serving stale rows, and nothing anywhere
+     * reports a problem. Reading the expiry locally is what makes the failure
+     * detectable before a request is spent on it.
+     *
+     * Returns true when the token cannot be read at all, so an unparseable
+     * token is treated as usable and the server gets to refuse it. Guessing
+     * "expired" there would take sync away for a reason nobody established.
+     */
+    val isTokenUsable: Boolean
+        get() = !SyncToken.isExpired(authToken, System.currentTimeMillis())
+
+    /**
+     * When the stored token stops being accepted, as epoch millis, or null.
+     *
+     * Exposed so the UI can say "expired" rather than "Connected", which is the
+     * row's current claim and is simply false while the token is dead.
+     */
+    val tokenExpiryMillis: Long?
+        get() = SyncToken.expiryMillis(authToken)
+
+    /**
+     * Renew the token if it is close to expiry.
+     *
+     * Called BEFORE every sync request rather than after a failure, and that
+     * ordering is the whole design: `auth-refresh` refuses an ALREADY-EXPIRED
+     * token with 401 (measured live), so there is no repairing a dead pairing,
+     * only renewing a live one. Tokens last 120 hours and this renews with a
+     * day of slack left, so a device used at all stays paired indefinitely.
+     *
+     * @return what happened. A caller that sees anything other than
+     *   [Renewal.Renewed] carries on with the token it has, because the request
+     *   may well still succeed - only the SERVER knows whether a token is good,
+     *   and this is an optimisation, not a gate.
+     */
+    suspend fun renewTokenIfNeeded(): Renewal {
+        val base = baseUrl ?: return Renewal.NotConfigured
+        val current = authToken ?: return Renewal.NotConfigured
+        if (!SyncToken.isExpiringWithin(current, System.currentTimeMillis())) {
+            return Renewal.NotNeeded
+        }
+        val result = DirectoryAuthApi.refresh(base, current)
+        val creds = result.credentials ?: return when (result.outcome) {
+            // The renewal came too late. The token is dead and only the password
+            // can fix it, so say exactly that instead of leaving the row
+            // claiming a connection that cannot carry a request.
+            DirectoryAuthApi.Outcome.BAD_CREDENTIALS -> Renewal.Expired(
+                result.detail ?: "This connection expired. Sign in again."
+            )
+            // Offline, timeout, DNS, TLS. The old token may still be perfectly
+            // good for another day, so nothing is invalidated and the request
+            // proceeds on it.
+            else -> Renewal.Unreachable(result.detail)
+        }
+        // Guard against a server that hands back a token for somebody else's
+        // profile. Writing it would silently re-point this device at the wrong
+        // identity, and every subsequent request would carry a correlationId
+        // this device did not issue.
+        if (creds.profileId.isNotBlank() && creds.profileId != profileId) {
+            Timber.e("Token refresh changed profile $profileId -> ${creds.profileId}; refusing")
+            return Renewal.Expired("The server returned a different profile. Sign in again.")
+        }
+        sharedPrefs.putString(KEY_TOKEN, creds.token)
+        Timber.i("Sync token renewed, valid for another ${SyncToken.TOKEN_LIFETIME_MILLIS / 3_600_000}h")
+        return Renewal.Renewed(creds.token)
+    }
+
+    /**
+     * What a renewal attempt achieved.
+     *
+     * Four cases rather than a boolean because they need four different
+     * reactions, and collapsing them is how this bug stayed invisible: a
+     * network blip and a genuinely dead pairing both used to read as "HTTP 400"
+     * on a queue row.
+     */
+    sealed interface Renewal {
+        /** Nothing to renew, or nowhere to renew it. */
+        data object NotConfigured : Renewal
+
+        /** The token had plenty of life left; no request was made. */
+        data object NotNeeded : Renewal
+
+        /** Renewed; [token] is the new one, already persisted. */
+        data class Renewed(val token: String) : Renewal
+
+        /**
+         * The token was already past expiry and `auth-refresh` refused it.
+         * [reason] is meant for a person. This is the ONE case that requires
+         * the owner, and it must never be mistaken for a network problem.
+         */
+        data class Expired(val reason: String) : Renewal
+
+        /**
+         * The renewal could not be attempted. The stored token is untouched and
+         * may well still work.
+         */
+        data class Unreachable(val reason: String?) : Renewal
+    }
+
     fun configure(baseUrl: String, token: String, profileId: String) {
         // Normalise so callers may or may not include a trailing slash.
         val normalised = baseUrl.trimEnd('/')

@@ -229,6 +229,9 @@ class DirectorySyncApi @Inject constructor(
             Timber.i("Sync not configured; skipping $path")
             return null
         }
+        if (!ensureUsableToken(path)) {
+            return null
+        }
         val token = config.authToken ?: run {
             Timber.i("No sync token; skipping $path")
             return null
@@ -251,6 +254,45 @@ class DirectorySyncApi @Inject constructor(
     }
 
     /**
+     * Renew the token if it needs it, and say whether the request may proceed.
+     *
+     * ## Why the read path needs this more than the write path does
+     *
+     * Measured live 2026-10-13: an expired token gets a WRITE refused
+     * `400 {"data":{},"message":"Failed to create record."}`, which is loud and
+     * lands in the outbox row's `lastError`. A READ gets **HTTP 200 with
+     * `totalItems: 0`** - PocketBase answers an anonymous list with an empty
+     * page rather than a 403. So the directory refresh appears to succeed,
+     * reports zero accounts, and [DirectorySyncRepository] deliberately clears
+     * only the profiles present in the response - which means the picker keeps
+     * serving stale rows and NOTHING anywhere says a request failed.
+     *
+     * That is the dangerous half of this bug. The local `exp` check is what
+     * closes it: a token already in the past never gets to make the request, so
+     * the caller sees a null and leaves the cache alone rather than being told
+     * "zero accounts, all good".
+     *
+     * @return false when the token is known dead and the request would be made
+     *   anonymously. True otherwise - including when the token merely could not
+     *   be renewed because the phone is offline, because that token may still
+     *   have another day of life and only the server can refuse it.
+     */
+    private suspend fun ensureUsableToken(what: String): Boolean {
+        val renewal = config.renewTokenIfNeeded()
+        if (renewal is SyncConfig.Renewal.Expired) {
+            Timber.w("Sync token expired; $what not attempted. ${renewal.reason}")
+            return false
+        }
+        // A renewal that failed for a network reason leaves the old token in
+        // place, so the local check is re-read rather than assumed.
+        if (!config.isTokenUsable) {
+            Timber.w("Sync token is past its expiry; $what not attempted")
+            return false
+        }
+        return true
+    }
+
+    /**
      * One write path for POST and PATCH, because they fail identically and the
      * difference is the verb alone.
      *
@@ -267,6 +309,12 @@ class DirectorySyncApi @Inject constructor(
         val base = config.baseUrl ?: run {
             Timber.i("Sync not configured; $what not published")
             return PublishResult.Undelivered("not configured")
+        }
+        if (!ensureUsableToken(what)) {
+            // Named rather than "HTTP 400": the row records this string as its
+            // lastError, and "HTTP 400 " is exactly the unexplained dead end
+            // that took a device dump and a JWT decode to diagnose.
+            return PublishResult.Undelivered("sign-in expired")
         }
         val token = config.authToken ?: run {
             Timber.i("No sync token; $what not published")

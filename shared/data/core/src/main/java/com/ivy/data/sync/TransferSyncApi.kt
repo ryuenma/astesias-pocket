@@ -209,6 +209,12 @@ class TransferSyncApi @Inject constructor(
             Timber.i("Sync not configured; $what stays queued")
             return PublishResult.Undelivered("not configured")
         }
+        if (!ensureUsableToken(what)) {
+            // Named rather than left as "HTTP 400 ": this string is the row's
+            // `lastError`, and an unexplained "HTTP 400 " is exactly the dead
+            // end that took a device dump and a hand-decoded JWT to diagnose.
+            return PublishResult.Undelivered("sign-in expired")
+        }
         val token = config.authToken ?: run {
             Timber.i("No sync token; $what stays queued")
             return PublishResult.Undelivered("no token")
@@ -242,6 +248,9 @@ class TransferSyncApi @Inject constructor(
             Timber.i("Sync not configured; skipping $path")
             return null
         }
+        if (!ensureUsableToken(path)) {
+            return null
+        }
         val token = config.authToken ?: run {
             Timber.i("No sync token; skipping $path")
             return null
@@ -261,6 +270,46 @@ class TransferSyncApi @Inject constructor(
             Timber.e(e, "Sync GET $path threw")
             null
         }
+    }
+
+    /**
+     * Renew the token if it needs it, and say whether the request may proceed.
+     *
+     * ## The read path is where this actually bites
+     *
+     * Measured live 2026-10-13 against the deployed server. With a token whose
+     * `exp` was 57.5 hours in the past:
+     *
+     * - a POST is refused `400 {"data":{},"message":"Failed to create record."}`,
+     *   which is loud and lands in the outbox row's `lastError`;
+     * - a GET returns **HTTP 200 with `totalItems: 0`**. PocketBase treats an
+     *   expired token as an anonymous caller, and its list rules answer an
+     *   anonymous list with an empty page rather than a 403.
+     *
+     * So the counterpart's phone pulls "zero transfers" and believes it. The
+     * inbox looks refreshed, nothing errors, and a transfer the owner already
+     * made never appears on the other phone. [TransferEventSync.pullEvents]
+     * cannot tell that from a genuinely empty server.
+     *
+     * Refusing the request on a locally-known-dead token is what turns that into
+     * a null, which [PullResult.Unreachable] already handles correctly by
+     * leaving the inbox alone.
+     *
+     * @return false when the token is known dead. True otherwise, including
+     *   when renewal failed because the phone is offline: that token may still
+     *   have a day of life left, and only the server can refuse it.
+     */
+    private suspend fun ensureUsableToken(what: String): Boolean {
+        val renewal = config.renewTokenIfNeeded()
+        if (renewal is SyncConfig.Renewal.Expired) {
+            Timber.w("Sync token expired; $what not attempted. ${renewal.reason}")
+            return false
+        }
+        if (!config.isTokenUsable) {
+            Timber.w("Sync token is past its expiry; $what not attempted")
+            return false
+        }
+        return true
     }
 
     companion object {

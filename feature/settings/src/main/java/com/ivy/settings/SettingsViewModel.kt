@@ -127,6 +127,11 @@ class SettingsViewModel @Inject constructor(
             languageOptionVisible = isLanguageOptionVisible(),
             syncBaseUrl = syncConfig.baseUrl.orEmpty(),
             syncProfile = syncConfig.profileId,
+            // Read from the token's own `exp`, never from a network call. A dead
+            // token is a fact the device already holds, and asking the server
+            // would produce exactly the ambiguous empty answer that let this
+            // hide: a read with one returns HTTP 200 and totalItems 0.
+            syncTokenExpired = syncConfig.profileId != null && !syncConfig.isTokenUsable,
             notificationsBlocked = getNotificationsBlocked(),
             notificationsPermanentlyDenied = getNotificationsPermanentlyDenied(),
             pendingTransfersCount = pendingTransfersCount.value,

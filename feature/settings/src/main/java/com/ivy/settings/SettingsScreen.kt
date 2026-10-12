@@ -166,6 +166,7 @@ fun BoxWithConstraintsScope.SettingsScreen() {
         },
         syncBaseUrl = uiState.syncBaseUrl,
         syncProfile = uiState.syncProfile,
+        syncTokenExpired = uiState.syncTokenExpired,
         onSyncSignIn = { url, email, password ->
             // Map the data layer's typed outcome onto the UI's own type, so the
             // legacy modal never has to import the networking layer.
@@ -226,6 +227,7 @@ private fun BoxWithConstraintsScope.UI(
     onSwitchLanguage: () -> Unit = {},
     syncBaseUrl: String = "",
     syncProfile: String? = null,
+    syncTokenExpired: Boolean = false,
     onSyncSignIn: suspend (String, String, String) -> SyncSignInResult =
         { _, _, _ -> SyncSignInResult(SyncSignInResult.Outcome.SERVER_ERROR) },
     onSyncDisconnect: () -> Unit = {}
@@ -296,6 +298,7 @@ private fun BoxWithConstraintsScope.UI(
             SyncServerRow(
                 baseUrl = syncBaseUrl,
                 profile = syncProfile,
+                tokenExpired = syncTokenExpired,
                 onClick = { syncModalVisible = true }
             )
 
@@ -596,6 +599,7 @@ private fun BoxWithConstraintsScope.UI(
         // the risk here, so this one is verified live before being used.
         currentUrl = syncBaseUrl.ifBlank { DEFAULT_SYNC_URL },
         currentProfile = syncProfile,
+        tokenExpired = syncTokenExpired,
         dismiss = { syncModalVisible = false },
         onSignIn = onSyncSignIn,
         onDisconnect = onSyncDisconnect
@@ -1000,7 +1004,11 @@ private fun AppSwitch(
  *
  * Shows connection state rather than hiding it: an unconfigured app that looks
  * configured is exactly the failure that made the transfer picker confusing in
- * the first place.
+ * the first place. The same rule applies to a token that has quietly run out -
+ * the pairing lasts 120 hours, and once it expires the app can still READ the
+ * server (HTTP 200, zero rows) but every write is refused. So "Connected" was
+ * a lie at exactly the moment it mattered, which is why the expired state gets
+ * its own line rather than a colour tweak.
  */
 /** Verified live 2026-10-02. Overridable in the dialog. */
 private const val DEFAULT_SYNC_URL = "https://astesias-pb.fly.dev"
@@ -1009,6 +1017,7 @@ private const val DEFAULT_SYNC_URL = "https://astesias-pb.fly.dev"
 private fun SyncServerRow(
     baseUrl: String,
     profile: String?,
+    tokenExpired: Boolean = false,
     onClick: () -> Unit
 ) {
     Column(
@@ -1043,12 +1052,20 @@ private fun SyncServerRow(
         Text(
             modifier = Modifier.padding(horizontal = 24.dp),
             text = when {
+                // Before the "connected" branch, because a profile id and a
+                // usable token are two different facts and only the second one
+                // means a request can succeed.
+                tokenExpired -> stringResource(R.string.sync_token_expired)
                 profile != null -> stringResource(R.string.sync_connected_as, profile)
                 baseUrl.isNotBlank() -> baseUrl
                 else -> stringResource(R.string.sync_not_connected)
             },
             style = UI.typo.nC.style(
-                color = if (profile != null) UI.colors.green else UI.colors.gray
+                color = when {
+                    tokenExpired -> UI.colors.red
+                    profile != null -> UI.colors.green
+                    else -> UI.colors.gray
+                }
             )
         )
 

@@ -471,6 +471,8 @@
     <string name="sync_sign_in_failed">Gagal terhubung. Periksa alamat dan detail masuk, serta apakah server dapat dijangkau.</string>
     <string name="sync_connected_as">Terhubung sebagai %1$s</string>
     <string name="sync_not_connected">Belum terhubung</string>
+    <string name="sync_token_expired">Sudah masuk, tetapi koneksi ini kedaluwarsa. Ketuk untuk masuk lagi.</string>
+    <string name="sync_token_expired_modal">Masuk sebagai %1$s, tetapi koneksi ini kedaluwarsa dan tidak dapat diperbarui sendiri. Masukkan kata sandi untuk menyambungkan kembali.</string>
     <string name="sync_disconnect">Putuskan</string>
 
     <string name="sync_err_no_account">Server menjawab tetapi menolak detail masuk ini. Jika akun ini belum pernah dihubungkan, akun harus dibuat lebih dulu di server.</string>

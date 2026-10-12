@@ -18,6 +18,20 @@ data class SettingsState(
     val syncBaseUrl: String = "",
     val syncProfile: String? = null,
     /**
+     * The stored sync token is past its `exp` and can no longer be renewed
+     * automatically.
+     *
+     * Why this is a state and not just a red row: measured live 2026-10-13, a
+     * dead token gets a write refused `400 {"data":{},"message":"Failed to
+     * create record."}` while a READ returns **HTTP 200 with `totalItems: 0`**.
+     * Nothing anywhere reports a failure, so the row's "Connected as qa_a" was
+     * simply true-looking while no request could succeed. The pairing lasts
+     * 120 hours and `auth-refresh` refuses an already-expired token, so this is
+     * a state the owner can genuinely reach - and when he does, he has to sign
+     * in again. Saying so is the entire fix on this side.
+     */
+    val syncTokenExpired: Boolean = false,
+    /**
      * True when the user has switched notifications on but Android is still
      * refusing to deliver them.
      *
