@@ -31,7 +31,6 @@ import com.ivy.data.profile.DirectoryRepository
 import com.ivy.data.sync.DirectorySyncRepository
 import com.ivy.domain.usecase.transfer.CrossProfileTransfer
 import com.ivy.domain.usecase.transfer.CrossProfileTransferPublisher
-import com.ivy.data.profile.ProfileId
 import com.ivy.data.repository.CategoryRepository
 import com.ivy.data.repository.TagRepository
 import com.ivy.data.repository.TransactionRepository
@@ -160,7 +159,7 @@ class EditTransactionViewModel @Inject constructor(
      */
     fun loadDirectory() {
         viewModelScope.launch {
-            directoryAccounts = directoryRepository.others(ProfileId.DEFAULT).toImmutableList()
+            directoryAccounts = directoryRepository.others().toImmutableList()
         }
         viewModelScope.launch {
             val refreshed = directorySync.refresh()
@@ -169,7 +168,7 @@ class EditTransactionViewModel @Inject constructor(
             // query that excludes my own account is the only thing that knows
             // which rows belong in this picker.
             if (refreshed) {
-                directoryAccounts = directoryRepository.others(ProfileId.DEFAULT).toImmutableList()
+                directoryAccounts = directoryRepository.others().toImmutableList()
             }
         }
     }

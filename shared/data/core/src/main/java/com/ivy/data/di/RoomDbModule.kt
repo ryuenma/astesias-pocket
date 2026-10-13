@@ -173,8 +173,9 @@ object RoomDbModule {
     @Provides
     fun provideDirectoryRepository(
         directoryAccountDao: DirectoryAccountDao,
+        config: com.ivy.data.sync.SyncConfig,
     ): com.ivy.data.profile.DirectoryRepository =
-        com.ivy.data.profile.DirectoryRepository(directoryAccountDao)
+        com.ivy.data.profile.DirectoryRepository(directoryAccountDao, config)
 
     @Provides
     fun provideExchangeRatesDao(
