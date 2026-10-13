@@ -49,6 +49,12 @@ class DirectorySyncRepository @Inject constructor(
      *   configured or the server was unreachable - both are ordinary, and
      *   neither is an error worth surfacing to the user mid-transaction.
      */
+    // ReturnCount: three refusals and one success, and the caller must be able
+    // to tell each refusal apart from "refreshed". Folding them into one
+    // expression would make the ORDER they are checked in unreadable, and the
+    // order is the safety property: a short response must be refused AFTER the
+    // fetch succeeded but BEFORE anything is deleted.
+    @Suppress("ReturnCount")
     suspend fun refresh(): Boolean {
         if (!config.isConfigured) {
             Timber.i("Sync not configured; directory cache left as-is")
@@ -57,6 +63,29 @@ class DirectorySyncRepository @Inject constructor(
 
         val envelope = api.fetchDirectory() ?: return false
         val remote = envelope.items
+
+        // A SHORT page is not a small directory, and the difference decides
+        // whether the cache is allowed to be rewritten.
+        //
+        // PocketBase pages every list, so a fetch can come back complete-looking
+        // and still be one page of several. Clearing and re-inserting from such
+        // a response DELETES every row past the page boundary - rows this device
+        // already had and that this response cannot restore - and the deletion is
+        // silent, because the log below counts what was fetched. Measured live
+        // 2026-10-13: 31 rows on the server, 30 fetched, one real account gone
+        // from the picker.
+        //
+        // So a response that does not account for every row it says exists is
+        // treated as no response at all: the cache is left exactly as it was and
+        // the next refresh tries again. Refusing is the safe direction - a stale
+        // row is a visible, correctable problem, whereas a deleted row is neither.
+        if (remote.size < envelope.totalItems) {
+            Timber.w(
+                "Directory fetch short: ${remote.size} of ${envelope.totalItems} row(s); " +
+                    "leaving the cache as it is rather than deleting rows this response cannot restore"
+            )
+            return false
+        }
         val names = api.fetchProfiles()
             ?.items
             ?.associate { profile -> profile.profileId to profile.displayName }

@@ -142,9 +142,68 @@ class DirectorySyncApi @Inject constructor(
     /** Every profile known to the server, used to resolve id -> display name. */
     suspend fun fetchProfiles(): PbList<RemoteProfile>? = get("/api/collections/profiles/records")
 
-    /** Every published account from every profile. */
-    suspend fun fetchDirectory(): PbList<RemoteDirectoryAccount>? =
-        get("/api/collections/directory_accounts/records")
+    /**
+     * Every published account from every profile, ACROSS EVERY PAGE.
+     *
+     * ## Why one request is not enough, measured
+     *
+     * PocketBase pages every list and its default page size is 30, so the bare
+     * `/api/collections/directory_accounts/records` returns at most 30 rows and
+     * says nothing about the rest. Measured against the LIVE server 2026-10-13:
+     * the collection held 31 rows and the bare URL answered
+     * `items.size = 30, totalItems = 31, perPage = 30`, with the newest row
+     * (`QaBWallet`) simply absent; the same URL with `perPage=200` returned all
+     * 31. The client logged `Directory refreshed: 30 account(s)` either way,
+     * because it counted what it fetched rather than what existed.
+     *
+     * This is not a large-directory edge case. The owner's own fixture publishes
+     * 21 accounts, so one more phone crosses the limit immediately - and because
+     * [DirectorySyncRepository] clears each profile it saw in the response before
+     * inserting what it fetched, a truncated page DELETEs the rows past the page
+     * boundary from the local cache and never brings them back. The picker then
+     * silently omits real accounts, with no error anywhere.
+     *
+     * Returns null when ANY page fails, so a partial directory is never passed
+     * off as a complete one: the caller keeps the cache it already has.
+     */
+    // ReturnCount: two failure exits that mean the same thing ("a page did not
+    // arrive, so there is no directory") and one result exit. Merging the two
+    // failures would need a flag threaded through the loop, which is more code
+    // to hide the same null.
+    @Suppress("ReturnCount")
+    suspend fun fetchDirectory(): PbList<RemoteDirectoryAccount>? {
+        val first = fetchDirectoryPage(1) ?: return null
+        val collected = mutableListOf<RemoteDirectoryAccount>()
+        collected += first.items
+        var page = 2
+        // `collected.size < totalItems` is the whole stop condition, and it is
+        // false on the first pass for a single-page directory - so the common
+        // case still costs exactly one request. No separate short-circuit, so
+        // this function has one failure exit and one result exit.
+        while (collected.size < first.totalItems && page <= DIRECTORY_MAX_PAGES) {
+            val next = fetchDirectoryPage(page) ?: return null
+            // A server that reports more rows than it will serve must not spin
+            // this loop: stop on the first empty page rather than asking again.
+            if (next.items.isEmpty()) break
+            collected += next.items
+            page++
+        }
+        return first.copy(items = collected)
+    }
+
+    /**
+     * One page of the directory.
+     *
+     * Split out from [fetchDirectory] so the paging loop is testable at all: the
+     * HTTP client below is a private `lazy` OkHttp instance with no injection
+     * seam, so this is the only place a unit test can stand between the loop and
+     * the network.
+     *
+     * [DIRECTORY_PAGE_SIZE] is passed explicitly rather than left to the
+     * server's default, because that default is the bug.
+     */
+    suspend fun fetchDirectoryPage(page: Int): PbList<RemoteDirectoryAccount>? =
+        get("/api/collections/directory_accounts/records?page=$page&perPage=$DIRECTORY_PAGE_SIZE")
 
     // ---------------------------------------------------------------------
     // Publishing
@@ -369,6 +428,25 @@ class DirectorySyncApi @Inject constructor(
          * account from the other phone's picker.
          */
         const val FALLBACK_CURRENCY = "IDR"
+
+        /**
+         * How many directory rows one request asks for.
+         *
+         * Stated explicitly, because PocketBase's default is 30 and that default
+         * is what silently truncated the directory: rows past the first page
+         * never reached a device, and the refresh DELETES each profile's rows
+         * before re-inserting them, so the ones past the boundary were removed
+         * from the local cache as well. 200 is comfortably under PocketBase's
+         * 500 ceiling and makes a two-person directory a single request.
+         */
+        const val DIRECTORY_PAGE_SIZE = 200
+
+        /**
+         * A ceiling on pages, so a server that advertises a `totalItems` it will
+         * never actually serve cannot spin the loop forever. 50 x 200 = 10,000
+         * accounts, which is far past anything this app should hold.
+         */
+        const val DIRECTORY_MAX_PAGES = 50
 
         /**
          * The one place a directory publish outcome is decided, so the rule is
