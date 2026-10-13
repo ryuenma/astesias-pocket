@@ -26,8 +26,17 @@ interface DirectoryAccountDao {
     @Query("SELECT * FROM directory_accounts WHERE profileId = :profileId ORDER BY name")
     suspend fun findByProfile(profileId: String): List<DirectoryAccountEntity>
 
-    @Query("SELECT * FROM directory_accounts WHERE accountId = :accountId LIMIT 1")
-    suspend fun findByAccountId(accountId: String): DirectoryAccountEntity?
+    /**
+     * The account [accountId] as published by [profileId].
+     *
+     * Both keys, because [accountId] is only unique within one profile: two
+     * profiles legitimately publish the same id (see [DirectoryAccountEntity]),
+     * so a lookup by account id alone cannot say whose account it found. The
+     * former `LIMIT 1` over the non-unique column returned an arbitrary
+     * profile's row and called it an answer.
+     */
+    @Query("SELECT * FROM directory_accounts WHERE profileId = :profileId AND accountId = :accountId")
+    suspend fun findByAccountId(profileId: String, accountId: String): DirectoryAccountEntity?
 
     @Query("DELETE FROM directory_accounts WHERE profileId = :profileId")
     suspend fun deleteProfile(profileId: String)
