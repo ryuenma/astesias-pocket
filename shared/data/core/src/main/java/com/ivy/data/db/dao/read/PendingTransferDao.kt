@@ -72,6 +72,10 @@ interface PendingTransferDao {
      */
     @Query("SELECT * FROM pending_transfers WHERE correlationId = :correlationId LIMIT 1")
     suspend fun findByCorrelationId(correlationId: UUID): PendingTransferEntity?
+
+    /** Removes every row when the owner wipes all local data. */
+    @Query("DELETE FROM pending_transfers")
+    suspend fun deleteAll()
 }
 
 /**

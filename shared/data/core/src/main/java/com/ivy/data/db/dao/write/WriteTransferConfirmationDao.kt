@@ -62,7 +62,7 @@ interface WriteTransferConfirmationDao {
     @Query("UPDATE transfer_confirmations SET acknowledged = 1 WHERE acknowledged = 0")
     suspend fun acknowledgeAll(): Int
 
-    /** Removes every row. Used on sign-out, when the server identity is gone. */
+    /** Removes every row when the owner wipes all local data. */
     @Query("DELETE FROM transfer_confirmations")
     suspend fun deleteAll()
 }

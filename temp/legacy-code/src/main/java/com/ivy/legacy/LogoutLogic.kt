@@ -6,12 +6,17 @@ import androidx.datastore.preferences.core.edit
 import com.ivy.base.legacy.SharedPrefs
 import com.ivy.data.DataObserver
 import com.ivy.data.DataWriteEvent
+import com.ivy.data.db.dao.read.DirectoryAccountDao
+import com.ivy.data.db.dao.read.PendingTransferDao
 import com.ivy.data.db.dao.read.UserDao
 import com.ivy.data.db.dao.write.WriteBudgetDao
 import com.ivy.data.db.dao.write.WriteLoanDao
 import com.ivy.data.db.dao.write.WriteLoanRecordDao
+import com.ivy.data.db.dao.write.WritePendingBillDao
 import com.ivy.data.db.dao.write.WritePlannedPaymentRuleDao
 import com.ivy.data.db.dao.write.WriteSettingsDao
+import com.ivy.data.db.dao.write.WriteTransferConfirmationDao
+import com.ivy.data.db.dao.write.WriteTransferOutboxDao
 import com.ivy.data.repository.AccountRepository
 import com.ivy.data.repository.CategoryRepository
 import com.ivy.data.repository.ExchangeRatesRepository
@@ -39,7 +44,12 @@ class LogoutLogic @Inject constructor(
     private val writeBudgetDao: WriteBudgetDao,
     private val writeLoanDao: WriteLoanDao,
     private val writeLoanRecordDao: WriteLoanRecordDao,
-    private val exchangeRatesRepository: ExchangeRatesRepository
+    private val exchangeRatesRepository: ExchangeRatesRepository,
+    private val directoryAccountDao: DirectoryAccountDao,
+    private val pendingTransferDao: PendingTransferDao,
+    private val writeTransferOutboxDao: WriteTransferOutboxDao,
+    private val writeTransferConfirmationDao: WriteTransferConfirmationDao,
+    private val writePendingBillDao: WritePendingBillDao,
 ) {
     suspend fun logout() {
         ioThread {
@@ -67,6 +77,11 @@ class LogoutLogic @Inject constructor(
         writeLoanDao.deleteAll()
         writeLoanRecordDao.deleteAll()
         exchangeRatesRepository.deleteAll()
+        directoryAccountDao.deleteAll()
+        pendingTransferDao.deleteAll()
+        writeTransferOutboxDao.deleteAll()
+        writeTransferConfirmationDao.deleteAll()
+        writePendingBillDao.deleteAll()
     }
 
     suspend fun cloudLogout() {

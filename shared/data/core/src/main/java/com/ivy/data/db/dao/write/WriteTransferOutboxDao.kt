@@ -93,7 +93,7 @@ interface WriteTransferOutboxDao {
     @Query("SELECT state FROM transfer_outbox WHERE correlationId = :correlationId LIMIT 1")
     suspend fun findState(correlationId: UUID): String?
 
-    /** Removes every row. Used on sign-out, when the server identity is gone. */
+    /** Removes every row when the owner wipes all local data. */
     @Query("DELETE FROM transfer_outbox")
     suspend fun deleteAll()
 }
