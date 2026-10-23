@@ -332,8 +332,9 @@ class TransferSyncApi @Inject constructor(
             // correlationId. So this is the duplicate replay: the record exists
             // and it is the right one, which is what the queue was trying to
             // achieve. Only honoured when the body actually says so - see
-            // `mentionsDuplicate`.
-            status == HttpStatusCode.BadRequest && body.mentionsDuplicate() ->
+            // [PocketBaseError.isUniqueViolation].
+            status == HttpStatusCode.BadRequest &&
+                PocketBaseError.isUniqueViolation(body, "correlationId") ->
                 PublishResult.AlreadyPublished
 
             status == HttpStatusCode.Conflict -> PublishResult.AlreadyPublished
@@ -378,41 +379,3 @@ internal fun String.escape(): String = buildString {
     }
 }
 
-/**
- * Whether a failure body is the unique-constraint rejection.
- *
- * ## The code is `validation_not_unique`, and the difference is money
- *
- * Measured against the LIVE server 2026-10-13, a replayed POST on
- * transfer_events returns HTTP 400 with
- * `{"data":{"correlationId":{"code":"validation_not_unique","message":"Value
- * must be unique."}}}` and leaves exactly one row — the index
- * (idx_transfer_correlation) did its job. `validation_invalid_unique`, the
- * string this used to look for, is what PocketBase's *field-level*
- * `unique: true` produces, and this project has no field-level unique: the
- * constraint is real SQL in the `indexes` array, because `unique: true` is
- * silently ignored on 0.40. So `validation_invalid_unique` was a string this
- * server can never emit, and the check never fired.
- *
- * That is the worst possible miss for this particular function. The outbox
- * drain reads [AlreadyPublished] as "the server has it, clear the row"; every
- * other 400 becomes Undelivered and the row stays queued. So a replay whose
- * response was dropped — the retry case the idempotency index exists for —
- * was classified Undelivered("HTTP 400 ") and retried forever, on a transfer
- * that WAS already on the other phone. The row's `lastError` then read
- * "HTTP 400 ", which is precisely the unexplained dead end this card started
- * from. Both strings are accepted now, because being strict about a code the
- * server does not emit protects nothing and costs the ledger its retry.
- *
- * Still strict on the field: a 400 that does NOT name `correlationId` is some
- * other validation failure, and treating that as "already published" would
- * silently discard a transfer that was never sent — the exact failure this
- * whole design exists to prevent.
- */
-private fun String?.mentionsDuplicate(): Boolean =
-    this != null &&
-        (
-            contains("validation_not_unique", ignoreCase = true) ||
-                contains("validation_invalid_unique", ignoreCase = true)
-            ) &&
-        contains("correlationId", ignoreCase = true)
