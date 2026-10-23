@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
@@ -34,6 +38,7 @@ import com.ivy.ui.R
 import com.ivy.ui.rememberScrollPositionListState
 import com.ivy.wallet.ui.theme.Green
 import com.ivy.wallet.ui.theme.Orange
+import com.ivy.wallet.ui.theme.modal.edit.AmountModal
 import kotlinx.collections.immutable.persistentListOf
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -55,6 +60,8 @@ private fun BoxWithConstraintsScope.UI(
     state: PlannedPaymentsScreenState,
     onEvent: (PlannedPaymentsScreenEvent) -> Unit = {}
 ) {
+    var editingPendingBill by remember { mutableStateOf<PendingBillEntity?>(null) }
+
     PlannedPaymentsLazyColumn(
         Header = {
             Spacer(Modifier.height(32.dp))
@@ -84,7 +91,18 @@ private fun BoxWithConstraintsScope.UI(
         pendingBills = state.pendingBills,
         zone = state.zone,
         onPendingBillAmountChanged = { key, amount ->
-            onEvent(PlannedPaymentsScreenEvent.OnPendingBillAmountChanged(key, amount))
+            editingPendingBill = state.pendingBills.find { it.occurrenceKey == key }
+                ?: PendingBillEntity(
+                    occurrenceKey = key,
+                    ruleId = "",
+                    dueOn = 0L,
+                    amount = amount,
+                    title = null,
+                    description = null,
+                    accountId = "",
+                    type = TransactionType.EXPENSE,
+                    state = PendingBillEntity.STATE_PENDING,
+                )
         },
         onPendingBillDismissed = { key ->
             onEvent(PlannedPaymentsScreenEvent.OnPendingBillDismissed(key))
@@ -112,6 +130,31 @@ private fun BoxWithConstraintsScope.UI(
             )
         }
     )
+
+    val billToEdit = editingPendingBill
+    if (billToEdit != null) {
+        val modalId = remember(billToEdit.occurrenceKey) {
+            UUID.nameUUIDFromBytes(billToEdit.occurrenceKey.toByteArray())
+        }
+        AmountModal(
+            id = modalId,
+            visible = true,
+            currency = state.currency,
+            initialAmount = billToEdit.amount,
+            dismiss = { editingPendingBill = null },
+            onAmountChanged = { newAmount ->
+                editingPendingBill = null
+                if (newAmount > 0.0) {
+                    onEvent(
+                        PlannedPaymentsScreenEvent.OnPendingBillAmountChanged(
+                            occurrenceKey = billToEdit.occurrenceKey,
+                            amount = newAmount,
+                        )
+                    )
+                }
+            },
+        )
+    }
 }
 
 @Preview
