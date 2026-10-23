@@ -63,9 +63,9 @@ object CrossProfileTransfer {
      * The two legs share only [correlationId]. Their account ids are mirrored, not
      * shared, so there is nothing else they could be joined on.
      *
-     * [toAccountId] is null: from her side the money came from outside her wallet
-     * rather than from another of her accounts, and there is no local account to
-     * name.
+     * [accountId] carries the sender's remote [fromAccountId] and [toAccountId]
+     * names her local [intoAccountId], mirroring [senderLeg] so balance queries
+     * credit her destination account (`toAccount`) rather than debiting it.
      *
      * This is the CONFIRMED leg: it is only ever built once the counterpart has
      * accepted. Before that the money exists as a pending item and nothing else,
@@ -84,11 +84,11 @@ object CrossProfileTransfer {
         description: String? = null,
     ): TransactionEntity = TransactionEntity(
         id = legId,
-        accountId = intoAccountId,
+        accountId = fromAccountId,
         type = TransactionType.TRANSFER,
         amount = amount,
-        toAccountId = null,
-        toAmount = null,
+        toAccountId = intoAccountId,
+        toAmount = amount,
         title = title,
         description = description,
         dateTime = dateTime,

@@ -60,10 +60,53 @@ class CrossProfileTransferTest {
         receiver().linkedTransactionId shouldBe correlationId
         // Account ids are mirrored, never shared - that is the whole reason a
         // correlation id is needed at all.
-        sender().toAccountId shouldBe herAccount
-        receiver().accountId shouldBe herAccount
         sender().accountId shouldBe myAccount
-        receiver().toAccountId shouldBe null
+        sender().toAccountId shouldBe herAccount
+        receiver().accountId shouldBe myAccount
+        receiver().toAccountId shouldBe herAccount
+    }
+
+    @Test
+    fun `an inbound cross-profile leg credits the destination account and never debits it`() = kotlinx.coroutines.test.runTest {
+        val leg = receiver()
+        val mapped = com.ivy.data.model.Transfer(
+            id = com.ivy.data.model.TransactionId(leg.id),
+            title = null,
+            description = null,
+            category = null,
+            time = leg.dateTime!!,
+            settled = true,
+            metadata = com.ivy.data.model.TransactionMetadata(null, null, null, null),
+            fromAccount = com.ivy.data.model.AccountId(leg.accountId),
+            fromValue = com.ivy.data.model.PositiveValue(
+                amount = com.ivy.data.model.primitive.PositiveDouble.unsafe(leg.amount),
+                asset = com.ivy.data.model.primitive.AssetCode.unsafe("IDR"),
+            ),
+            toAccount = com.ivy.data.model.AccountId(leg.toAccountId!!),
+            toValue = com.ivy.data.model.PositiveValue(
+                amount = com.ivy.data.model.primitive.PositiveDouble.unsafe(leg.amount),
+                asset = com.ivy.data.model.primitive.AssetCode.unsafe("IDR"),
+            ),
+            tags = emptyList(),
+        )
+        val statsUseCase = com.ivy.domain.usecase.account.AccountStatsUseCase(
+            dispatchers = com.ivy.base.TestDispatchersProvider,
+            accountRepository = io.mockk.mockk(relaxed = true),
+            exchangeUseCase = io.mockk.mockk(relaxed = true),
+        )
+        val stats = statsUseCase.calculate(
+            account = com.ivy.data.model.AccountId(herAccount),
+            transactions = listOf(mapped),
+        )
+        val balance = com.ivy.domain.usecase.BalanceBuilder().run {
+            processDeposits(incomes = stats.income.values, transfersIn = stats.transfersIn.values)
+            processWithdrawals(expenses = stats.expense.values, transfersOut = stats.transfersOut.values)
+            build()
+        }
+        val idr = com.ivy.data.model.primitive.AssetCode.unsafe("IDR")
+        stats.transfersIn.values[idr]?.value shouldBe 500_000.0
+        stats.transfersOut.values[idr] shouldBe null
+        balance[idr]?.value shouldBe 500_000.0
     }
 
     @Test

@@ -201,6 +201,9 @@ class TransferInboxTest {
         )
 
         accepted.type.name shouldBe "TRANSFER"
+        accepted.accountId shouldBe MY_ACCOUNT
+        accepted.toAccountId shouldBe HER_ACCOUNT
+        accepted.toAmount shouldBe 500_000.0
         // Still keyed by the same correlation id, so the two legs remain joinable
         // and a replay can recognise the confirmed transfer.
         accepted.linkedTransactionId shouldBe CORRELATION

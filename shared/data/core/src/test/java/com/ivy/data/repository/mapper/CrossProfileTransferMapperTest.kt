@@ -228,4 +228,60 @@ class CrossProfileTransferMapperTest {
             it shouldContain "Transfer"
         }
     }
+
+    private fun receiverLeg() = TransactionEntity(
+        id = UUID.fromString("44444444-4444-4444-4444-444444444444"),
+        accountId = herAccountId,
+        type = TransactionType.TRANSFER,
+        amount = 500_000.0,
+        toAccountId = myAccountId,
+        toAmount = null,
+        title = "Transfer",
+        dateTime = when0,
+        counterpartProfileId = "owner",
+        linkedTransactionId = correlationId,
+    )
+
+    @Test
+    fun `the receiver's cross-profile leg is readable even though his account is not local`() = runTest {
+        mockMyAccount()
+
+        val result = with(mapper) { receiverLeg().toDomain(tags = emptyList()) }
+
+        result.isRight() shouldBe true
+        val transfer = result.getOrNull().shouldNotBeNull() as com.ivy.data.model.Transfer
+        transfer.fromAccount shouldBe AccountId(herAccountId)
+        transfer.toAccount shouldBe AccountId(myAccountId)
+        transfer.fromValue shouldBe com.ivy.data.model.PositiveValue(
+            amount = com.ivy.data.model.primitive.PositiveDouble.unsafe(500_000.0),
+            asset = AssetCode.unsafe("IDR"),
+        )
+        transfer.toValue shouldBe com.ivy.data.model.PositiveValue(
+            amount = com.ivy.data.model.primitive.PositiveDouble.unsafe(500_000.0),
+            asset = AssetCode.unsafe("IDR"),
+        )
+    }
+
+    @Test
+    fun `an ordinary intra-profile transfer still rejects a missing source account`() = runTest {
+        mockMyAccount()
+        val orphanSource = receiverLeg().copy(counterpartProfileId = null)
+
+        val result = with(mapper) { orphanSource.toDomain(tags = emptyList()) }
+
+        result.isLeft() shouldBe true
+    }
+
+    @Test
+    fun `a cross-profile transfer with neither account local is rejected`() = runTest {
+        val unknownA = UUID.fromString("88888888-8888-8888-8888-888888888888")
+        val unknownB = UUID.fromString("99999999-9999-9999-9999-999999999999")
+        coEvery { accountRepo.findById(AccountId(unknownA)) } returns null
+        coEvery { accountRepo.findById(AccountId(unknownB)) } returns null
+        val neitherLocal = receiverLeg().copy(accountId = unknownA, toAccountId = unknownB)
+
+        val result = with(mapper) { neitherLocal.toDomain(tags = emptyList()) }
+
+        result.isLeft() shouldBe true
+    }
 }
