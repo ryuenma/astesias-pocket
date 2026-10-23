@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ivy.base.legacy.SharedPrefs
 import com.ivy.data.repository.CurrencyRepository
-import com.ivy.data.sync.DirectorySyncRepository
+import com.ivy.domain.usecase.transfer.TransferSyncRunner
 import com.ivy.domain.usecase.exchange.SyncExchangeRatesUseCase
 import com.ivy.frp.test.TestIdlingResource
 import com.ivy.legacy.IvyWalletCtx
@@ -28,7 +28,7 @@ class MainViewModel @Inject constructor(
     private val accountCreator: AccountCreator,
     private val sharedPrefs: SharedPrefs,
     private val currencyRepository: CurrencyRepository,
-    private val directorySync: DirectorySyncRepository,
+    private val transferSyncRunner: TransferSyncRunner,
 ) : ViewModel() {
 
     private val _currency = MutableLiveData<String>()
@@ -70,7 +70,7 @@ class MainViewModel @Inject constructor(
             // Reconciles rather than blindly creating, so an unchanged install
             // costs zero writes, and it is NOT inside `ioThread` with the
             // exchange rates because it must not delay that.
-            directorySync.publishLocalAccounts()
+            transferSyncRunner.runOnce()
 
             TestIdlingResource.decrement()
         }

@@ -33,6 +33,7 @@ import com.ivy.domain.usecase.transfer.TransferConfirmationRepository
 import com.ivy.frp.monad.Res
 import com.ivy.legacy.IvyWalletCtx
 import com.ivy.legacy.LogoutLogic
+import com.ivy.legacy.sync.TransferSyncScheduler
 import com.ivy.legacy.domain.action.settings.UpdateSettingsAct
 import com.ivy.legacy.utils.getISOFormattedDateTime
 import com.ivy.legacy.utils.ioThread
@@ -64,6 +65,7 @@ class SettingsViewModel @Inject constructor(
     private val sharedPrefs: SharedPrefs,
     private val syncConfig: SyncConfig,
     private val directorySync: DirectorySyncRepository,
+    private val transferSyncScheduler: TransferSyncScheduler,
     private val pendingTransferRepository: PendingTransferRepository,
     private val transferConfirmationRepository: TransferConfirmationRepository,
     private val backupDataUseCase: BackupDataUseCase,
@@ -389,6 +391,8 @@ class SettingsViewModel @Inject constructor(
             withContext(NonCancellable + dispatchersProvider.io) {
                 runCatching { directorySync.publishLocalAccounts() }
                     .onFailure { Timber.e(it, "Signed in, but publishing accounts failed") }
+                runCatching { transferSyncScheduler.scheduleIfConfigured() }
+                    .onFailure { Timber.e(it, "Signed in, but scheduling background sync failed") }
             }
         }
         return result
@@ -396,6 +400,8 @@ class SettingsViewModel @Inject constructor(
 
     fun disconnectSync() {
         syncConfig.clear()
+        runCatching { transferSyncScheduler.cancel() }
+            .onFailure { Timber.e(it, "Could not cancel background transfer sync") }
     }
 
     override fun onEvent(event: SettingsEvent) {

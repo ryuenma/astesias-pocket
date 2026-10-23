@@ -20,6 +20,7 @@ import com.ivy.navigation.Navigation
 import com.ivy.navigation.OnboardingScreen
 import com.ivy.ui.R
 import com.ivy.legacy.notification.BillReminderScheduler
+import com.ivy.legacy.sync.TransferSyncScheduler
 import com.ivy.wallet.domain.deprecated.logic.notification.TransactionReminderLogic
 import com.ivy.wallet.migrations.MigrationsManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +43,7 @@ class RootViewModel @Inject constructor(
     private val sharedPrefs: SharedPrefs,
     private val transactionReminderLogic: TransactionReminderLogic,
     private val billReminderScheduler: BillReminderScheduler,
+    private val transferSyncScheduler: TransferSyncScheduler,
     private val migrationsManager: MigrationsManager,
     private val legalRepo: LegalRepository,
 ) : ViewModel() {
@@ -127,6 +129,7 @@ class RootViewModel @Inject constructor(
             // WorkManager, which touches its own database.
             ioThread {
                 billReminderScheduler.scheduleAll()
+                transferSyncScheduler.scheduleIfConfigured()
             }
         }
     }
