@@ -509,11 +509,14 @@ private fun TransferHeader(
 
         Spacer(Modifier.width(4.dp))
 
+        val partnerFallback = transaction.counterpartProfileId
+            ?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.partner_account)
+
         Text(
             modifier = Modifier
                 .padding(vertical = 8.dp),
-            // used toString() in case of null
-            text = account?.name.toString(),
+            text = account?.name ?: partnerFallback,
             style = UI.typo.c.style(
                 fontWeight = FontWeight.ExtraBold,
                 color = accountContrastColor
@@ -544,8 +547,7 @@ private fun TransferHeader(
         Text(
             modifier = Modifier
                 .padding(vertical = 8.dp),
-            // used toString() in case of null
-            text = toAccount?.name.toString(),
+            text = toAccount?.name ?: partnerFallback,
             style = UI.typo.c.style(
                 fontWeight = FontWeight.ExtraBold,
                 color = toAccountContrastColor

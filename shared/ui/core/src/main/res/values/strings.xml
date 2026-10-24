@@ -506,6 +506,7 @@
     <string name="collapse_category">Collapse %1$s</string>
 
     <!-- Incoming transfers awaiting confirmation -->
+    <string name="partner_account">Partner</string>
     <string name="pending_transfers_title">Confirm incoming</string>
     <string name="pending_transfers_description">These transfers have been sent to you but aren’t in your balance yet. Accept one to record it, or decline it.</string>
     <string name="no_pending_transfers">Nothing to confirm</string>
