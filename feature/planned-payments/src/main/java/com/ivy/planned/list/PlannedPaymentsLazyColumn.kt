@@ -75,6 +75,19 @@ fun PlannedPaymentsLazyColumn(
             Header()
         }
 
+        // Above the rules: a bill that is waiting to be paid is more urgent
+        // information than the schedule that produced it, and keeping
+        // plannedPaymentItems last preserves the trailing bottom-bar clearance spacer.
+        pendingBillItems(
+            bills = pendingBills,
+            currency = currency,
+            zone = zone,
+            onAdjustAmount = { bill ->
+                onPendingBillAmountChanged(bill.occurrenceKey, bill.amount)
+            },
+            onDismiss = { bill -> onPendingBillDismissed(bill.occurrenceKey) },
+        )
+
         plannedPaymentItems(
             nav = nav,
             currency = currency,
@@ -93,18 +106,6 @@ fun PlannedPaymentsLazyColumn(
             recurringExpenses = recurringExpenses,
             recurringExpanded = recurringExpanded,
             setRecurringExpanded = setRecurringExpanded
-        )
-
-        // Above the rules: a bill that is waiting to be paid is more urgent
-        // information than the schedule that produced it.
-        pendingBillItems(
-            bills = pendingBills,
-            currency = currency,
-            zone = zone,
-            onAdjustAmount = { bill ->
-                onPendingBillAmountChanged(bill.occurrenceKey, bill.amount)
-            },
-            onDismiss = { bill -> onPendingBillDismissed(bill.occurrenceKey) },
         )
     }
 }
