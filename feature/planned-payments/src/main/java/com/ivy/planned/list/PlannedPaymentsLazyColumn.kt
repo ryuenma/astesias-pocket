@@ -199,7 +199,7 @@ private fun LazyListScope.plannedPaymentItems(
     }
 
     item {
-        // last spacer - scroll hack
+        // Why: clears the floating PlannedPaymentsBottomBar at the end of the list.
         Spacer(Modifier.height(150.dp))
     }
 }

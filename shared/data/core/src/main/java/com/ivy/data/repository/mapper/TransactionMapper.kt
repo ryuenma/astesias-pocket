@@ -104,27 +104,11 @@ class TransactionMapper @Inject constructor(
 
                 val toAccount = accountRepository.findById(toAccountId)
 
-                // A cross-profile leg written through this mapper comes back out
-                // with a null `counterpartProfileId` and a null
-                // `linkedTransactionId`: the domain `Transaction` has no fields to
-                // read them from. A known gap, not a claim of correctness. It does
-                // not affect the owner-confirmation path, which writes legs
-                // straight to `WriteTransactionDao` and sets both itself - but the
-                // correlation id is the idempotency key, so a flow that round-trips
-                // a leg through the domain model cannot recognise a replay.
-                //
-                // A cross-profile transfer names an account in SOMEONE ELSE'S ledger
-                // (destination on the sender's leg, source on the receiver's leg).
-                // That id cannot resolve here, and must not be required to: the mapper
-                // reports failure with an Either and every ledger read discards those
-                // with `mapNotNull`, so an unresolvable counterparty account does not
-                // surface as an error - it makes the transaction SILENTLY DISAPPEAR
-                // from the local ledger while still sitting in the database.
-                //
-                // So the remote side's asset falls back to the local account's.
-                // A NULL `counterpartProfileId` preserves the original strictness: an
-                // ordinary intra-profile transfer pointing at a missing account is
-                // genuinely corrupt data and is still rejected here.
+                // Why: cross-profile transfer legs reference a counterparty account in the
+                // partner's ledger (`toAccount` on senderLeg, `sourceAccount` on receiverLeg).
+                // When `counterpartProfileId != null`, the remote side inherits the local
+                // account's asset; intra-profile transfers (`counterpartProfileId == null`)
+                // still require both accounts to resolve locally.
                 if (sourceAccount == null) {
                     ensure(counterpartProfileId != null && toAccount != null) {
                         "No source account for transaction: ${this@toDomain}"
