@@ -133,7 +133,6 @@ dependencies {
     implementation(projects.feature.budgets)
     implementation(projects.feature.categories)
     implementation(projects.feature.editTransaction)
-    implementation(projects.feature.exchangeRates)
     implementation(projects.feature.features)
     implementation(projects.feature.home)
     implementation(projects.feature.importData)

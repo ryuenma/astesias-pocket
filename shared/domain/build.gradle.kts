@@ -17,7 +17,6 @@ dependencies {
     implementation(libs.bundles.opencsv)
 
     testImplementation(projects.shared.data.modelTesting)
-    testImplementation(projects.shared.data.coreTesting)
 
     androidTestImplementation(libs.bundles.integration.testing)
     androidTestImplementation(libs.mockk.android)
