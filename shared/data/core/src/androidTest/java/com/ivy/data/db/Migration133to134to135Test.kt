@@ -93,7 +93,11 @@ class Migration133to134to135Test {
     /** The new column round-trips a value, so a saved day is really persisted. */
     @Test
     fun aDueDayIsWrittenAndReadBack() {
-        val newDb = freshDb("due-day-roundtrip")
+        helper.createDatabase("due-day-roundtrip", 133).apply {
+            insertRule(id = UUID.randomUUID(), title = "Internet", amount = 500_000.0)
+            close()
+        }
+        val newDb = helper.runMigrationsAndValidate("due-day-roundtrip", 135, true, *bothMigrations)
 
         newDb.execSQL(
             "UPDATE planned_payment_rules SET dueDayOfMonth = 25 WHERE title = ?",
@@ -239,7 +243,7 @@ class Migration133to134to135Test {
         val newDb = freshDb("pending-bills-outside-ledger")
 
         // A real transaction the owner actually made.
-        newDb.execSQL(insertTransactionSql(), arrayOf<Any?>(UUID.randomUUID().toString(), 1_000_000.0))
+        newDb.insertTransaction(UUID.randomUUID().toString(), 1_000_000.0)
         // A bill that has been reminded but not paid.
         newDb.execSQL(insertSql(), insertArgs("reminder:[cccccccc-bbbb-cccc-dddd-eeeeeeeeeeee]:[2027-01]"))
 
@@ -384,6 +388,17 @@ class Migration133to134to135Test {
             loanRecordId, isSynced, isDeleted, id
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """.trimIndent()
+
+    private fun SupportSQLiteDatabase.insertTransaction(id: String, amount: Double) {
+        execSQL(
+            insertTransactionSql(),
+            arrayOf<Any?>(
+                UUID.randomUUID().toString(), "EXPENSE", amount, null, null, null, null,
+                1_767_225_300_000L, null, null, null, null, null, null, null, null,
+                null, 0, 0, id,
+            ),
+        )
+    }
 
     /** Inserts a v133-shaped planned payment rule; v133 has no `dueDayOfMonth`. */
     private fun SupportSQLiteDatabase.insertRule(
