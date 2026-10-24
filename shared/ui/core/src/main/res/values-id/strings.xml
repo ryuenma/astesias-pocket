@@ -501,4 +501,16 @@
     <string name="transfer_answer_declined">Ditolak</string>
     <string name="transfer_answers_waiting">%1$d jawaban yang belum kamu lihat</string>
     <string name="msg_transfer_save_failed">Transfer itu gagal disimpan. Tidak ada yang tercatat — coba lagi.</string>
+
+    <string name="bill_reminder_pending_subtitle">Belum dihitung ke saldo sampai Anda membayarnya.</string>
+    <string name="no_pending_transfers">Tidak ada yang perlu dikonfirmasi</string>
+    <string name="notifications_blocked_open_settings">Pengingat mati. Android memblokir notifikasi. Buka pengaturan notifikasi untuk mengizinkannya.</string>
+    <string name="notifications_blocked_retry">Pengingat mati. Android belum mengizinkan notifikasi. Ketuk untuk mengizinkannya.</string>
+    <string name="open_notification_settings">Buka pengaturan notifikasi</string>
+    <string name="partner_account">Pasangan</string>
+    <string name="pending_transfer_accept">Terima</string>
+    <string name="pending_transfer_decline">Tolak</string>
+    <string name="pending_transfers_description">Transfer ini dikirim kepada Anda tetapi belum masuk ke saldo. Terima untuk mencatatnya, atau tolak.</string>
+    <string name="pending_transfers_title">Konfirmasi transfer masuk</string>
+    <string name="pending_transfers_waiting">%1$d menunggu untuk Anda terima atau tolak</string>
 </resources>
