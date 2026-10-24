@@ -60,42 +60,42 @@ class FormatMoneyUseCaseTest {
             showDecimal = true,
             shortenAmount = true,
             locale = Locale.ENGLISH,
-            expectedOutput = "13k"
+            expectedOutput = "13rb"
         ),
         ENGLISH_MILLION_SHORT_AMT(
             amount = 1_233_500.10,
             showDecimal = true,
             shortenAmount = true,
             locale = Locale.ENGLISH,
-            expectedOutput = "1.23m"
+            expectedOutput = "1.23jt"
         ),
         ENGLISH_BILLION_SHORT_AMT(
             amount = 1_233_000_000.10,
             showDecimal = true,
             shortenAmount = true,
             locale = Locale.ENGLISH,
-            expectedOutput = "1.23b"
+            expectedOutput = "1.23M"
         ),
         GERMAN_1K_SHORT_AMT(
             amount = 13_000.10,
             showDecimal = true,
             shortenAmount = true,
             locale = Locale.GERMAN,
-            expectedOutput = "13k"
+            expectedOutput = "13rb"
         ),
         GERMAN_MILLION_SHORT_AMT(
             amount = 1_233_500.10,
             showDecimal = true,
             shortenAmount = true,
             locale = Locale.GERMAN,
-            expectedOutput = "1,23m"
+            expectedOutput = "1,23jt"
         ),
         GERMAN_BILLION_SHORT_AMT(
             amount = 1_233_000_000.10,
             showDecimal = true,
             shortenAmount = true,
             locale = Locale.GERMAN,
-            expectedOutput = "1,23b"
+            expectedOutput = "1,23M"
         ),
     }
 

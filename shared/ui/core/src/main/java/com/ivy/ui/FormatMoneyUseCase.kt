@@ -12,6 +12,7 @@ import kotlin.math.abs
 const val THOUSAND = 1_000
 const val MILLION = 1_000_000
 const val BILLION = 1_000_000_000
+const val TRILLION = 1_000_000_000_000L
 
 class FormatMoneyUseCase @Inject constructor(
     private val features: Features,
@@ -26,12 +27,14 @@ class FormatMoneyUseCase @Inject constructor(
 
     suspend fun format(value: Double, shortenAmount: Boolean): String {
         if (abs(value) >= THOUSAND && shortenAmount) {
-            val result = if (abs(value) >= BILLION) {
-                "${shortenAmountFormatter.format(value / BILLION)}b"
+            val result = if (abs(value) >= TRILLION) {
+                "${shortenAmountFormatter.format(value / TRILLION)}T"
+            } else if (abs(value) >= BILLION) {
+                "${shortenAmountFormatter.format(value / BILLION)}M"
             } else if (abs(value) >= MILLION) {
-                "${shortenAmountFormatter.format(value / MILLION)}m"
+                "${shortenAmountFormatter.format(value / MILLION)}jt"
             } else {
-                "${shortenAmountFormatter.format(value / THOUSAND)}k"
+                "${shortenAmountFormatter.format(value / THOUSAND)}rb"
             }
             return result
         } else {

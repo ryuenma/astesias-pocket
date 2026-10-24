@@ -7,6 +7,8 @@ import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.truncate
 
+const val TRILLION = 1_000_000_000_000L
+const val BILLION = 1_000_000_000L
 const val MILLION = 1000000
 const val N_100K = 100000
 const val THOUSAND = 1000
@@ -97,12 +99,20 @@ private fun Double.formatFIAT(): String = DecimalFormat("#,##0.00").format(this)
 
 fun shortenAmount(amount: Double): String {
     return when {
+        abs(amount) >= TRILLION -> {
+            formatShortenedNumber(amount / TRILLION, "T")
+        }
+
+        abs(amount) >= BILLION -> {
+            formatShortenedNumber(amount / BILLION, "M")
+        }
+
         abs(amount) >= MILLION -> {
-            formatShortenedNumber(amount / MILLION, "m")
+            formatShortenedNumber(amount / MILLION, "jt")
         }
 
         abs(amount) >= THOUSAND -> {
-            formatShortenedNumber(amount / THOUSAND, "k")
+            formatShortenedNumber(amount / THOUSAND, "rb")
         }
 
         else -> amount.toString()
