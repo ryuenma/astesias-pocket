@@ -78,7 +78,7 @@ fun LazyListScope.pendingBillItems(
             Text(
                 // Explains WHY these are here and are not in his balance, rather
                 // than leaving him to infer it from the badge.
-                text = stringResource(R.string.bill_reminder_pending_empty),
+                text = stringResource(R.string.bill_reminder_pending_subtitle),
                 style = UI.typo.c.style(color = UI.colors.pureInverse),
             )
         }

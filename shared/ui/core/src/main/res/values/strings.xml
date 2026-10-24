@@ -543,6 +543,7 @@
     <string name="bill_reminder_due">Due %1$s - %2$s. Open the app to pay or adjust it.</string>
     <string name="bill_reminder_pending_title">Upcoming bills</string>
     <string name="bill_reminder_pending_empty">No bills are waiting to be paid.</string>
+    <string name="bill_reminder_pending_subtitle">Not counted in your balance until you pay them.</string>
     <string name="bill_reminder_pending_unpaid">UNPAID</string>
     <string name="bill_reminder_remind_on">Remind me on day %1$d of each month</string>
     <string name="bill_reminder_no_day">No monthly reminder</string>
