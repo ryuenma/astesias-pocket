@@ -26,6 +26,7 @@ import com.ivy.ui.R
 import com.ivy.wallet.ui.theme.Gradient
 import com.ivy.wallet.ui.theme.components.IvyBorderButton
 import com.ivy.wallet.ui.theme.modal.IvyModal
+import java.text.NumberFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -165,7 +166,7 @@ private fun PendingTransferRow(
             ),
         )
         Text(
-            text = "${entry.amount} ${entry.currency}",
+            text = "${formatPendingAmount(entry.amount)} ${entry.currency}",
             style = UI.typo.b2.style(
                 color = UI.colors.pureInverse,
                 fontWeight = FontWeight.ExtraBold,
@@ -219,3 +220,8 @@ private fun PendingTransferRow(
         }
     }
 }
+
+private fun formatPendingAmount(amount: Double): String =
+    NumberFormat.getNumberInstance().apply {
+        maximumFractionDigits = 2
+    }.format(amount)
