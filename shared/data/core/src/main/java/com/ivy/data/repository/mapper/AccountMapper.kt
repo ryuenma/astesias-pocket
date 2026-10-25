@@ -25,7 +25,7 @@ class AccountMapper @Inject constructor(
             asset = currency?.let(AssetCode::from)?.getOrNull()
                 ?: currencyRepository.getBaseCurrency(),
             color = ColorInt(color),
-            icon = icon?.let(IconAsset::from)?.getOrNull(),
+            icon = icon?.trim()?.replace(" ", "_")?.let(IconAsset::from)?.getOrNull(),
             includeInBalance = includeInBalance,
             orderNum = orderNum,
         )

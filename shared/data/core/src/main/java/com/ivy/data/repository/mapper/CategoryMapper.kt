@@ -18,7 +18,7 @@ class CategoryMapper @Inject constructor() {
             id = com.ivy.data.model.CategoryId(id),
             name = NotBlankTrimmedString.from(name).bind(),
             color = ColorInt(color),
-            icon = icon?.let(IconAsset::from)?.getOrNull(),
+            icon = icon?.trim()?.replace(" ", "_")?.let(IconAsset::from)?.getOrNull(),
             orderNum = orderNum,
             parentId = parentId?.let { com.ivy.data.model.CategoryId(it) },
         )
