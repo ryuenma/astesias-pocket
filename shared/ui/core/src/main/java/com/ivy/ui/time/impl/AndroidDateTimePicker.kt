@@ -27,6 +27,7 @@ import com.ivy.base.time.TimeProvider
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneOffset
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,7 +53,7 @@ class AndroidDateTimePicker @Inject constructor(
         modifier: Modifier = Modifier
     ) {
         val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = viewState.initialDate?.toEpochMilli(),
+            initialSelectedDateMillis = initialDatePickerMillis(viewState.initialDate, timeConverter),
         )
         DatePickerDialog(
             modifier = modifier,
@@ -60,10 +61,9 @@ class AndroidDateTimePicker @Inject constructor(
             confirmButton = {
                 ConfirmButton(onClick = {
                     datePickerViewState = null
-                    pickerState.selectedDateMillis?.let(Instant::ofEpochMilli)
-                        ?.let {
-                            with(timeConverter) { it.toLocalDate() }
-                    }?.let(viewState.onDatePicked)
+                    pickerState.selectedDateMillis
+                        ?.let(::selectedMillisToLocalDate)
+                        ?.let(viewState.onDatePicked)
                 })
             },
             colors = DatePickerDefaults.colors(
@@ -162,4 +162,17 @@ class AndroidDateTimePicker @Inject constructor(
         val initialTime: LocalTime?,
         val onTimePicked: (LocalTime) -> Unit
     )
+
+    companion object {
+        fun initialDatePickerMillis(initialDate: Instant?, timeConverter: TimeConverter): Long? =
+            initialDate?.let {
+                with(timeConverter) { it.toLocalDate() }
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant()
+                    .toEpochMilli()
+            }
+
+        fun selectedMillisToLocalDate(selectedDateMillis: Long): LocalDate =
+            Instant.ofEpochMilli(selectedDateMillis).atZone(ZoneOffset.UTC).toLocalDate()
+    }
 }
