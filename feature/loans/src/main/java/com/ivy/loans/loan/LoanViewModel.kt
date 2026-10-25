@@ -203,8 +203,8 @@ class LoanViewModel @Inject constructor(
 
             initialiseAccounts()
 
-            totalOweAmount = 0.0
-            totalOwedAmount = 0.0
+            var oweSum = 0.0
+            var owedSum = 0.0
 
             allLoans = ioThread {
                 loansAct(Unit)
@@ -215,11 +215,14 @@ class LoanViewModel @Inject constructor(
                         } else {
                             0.0
                         }
-                        var currCode = findCurrencyCode(accounts, loan.accountId)
+                        val currCode = findCurrencyCode(accounts, loan.accountId)
+                        val remaining = (loanTotalAmount - amountPaid).coerceAtLeast(0.0)
 
-                        when (loan.type) {
-                            LoanType.BORROW -> totalOweAmount += (loanTotalAmount - amountPaid)
-                            LoanType.LEND -> totalOwedAmount += (loanTotalAmount - amountPaid)
+                        if (percentPaid < 1.0) {
+                            when (loan.type) {
+                                LoanType.BORROW -> oweSum += remaining
+                                LoanType.LEND -> owedSum += remaining
+                            }
                         }
 
                         DisplayLoan(
@@ -240,6 +243,8 @@ class LoanViewModel @Inject constructor(
                         )
                     }.toImmutableList()
             }
+            totalOweAmount = oweSum
+            totalOwedAmount = owedSum
             loadPendingLoans()
             loadCompletedLoans()
 

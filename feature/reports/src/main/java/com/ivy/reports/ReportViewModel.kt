@@ -446,10 +446,7 @@ class ReportViewModel @Inject constructor(
             }
             .filter { trn ->
                 // Filter by Categories
-
-                filterCategoryIds.contains(trn.category) || with(transactionMapper) {
-                    (trn.getTransactionType() == TransactionType.TRANSFER)
-                }
+                filterCategoryIds.isEmpty() || filterCategoryIds.contains(trn.category)
             }
             .filterSuspend {
                 // Filter by Amount
@@ -520,8 +517,16 @@ class ReportViewModel @Inject constructor(
         return this.toLowerCaseLocal().contains(anotherString.toLowerCaseLocal())
     }
 
-    private fun calculateBalance(incomeExpenseTransferPair: IncomeExpenseTransferPair): BigDecimal {
-        return incomeExpenseTransferPair.income + incomeExpenseTransferPair.transferIncome - incomeExpenseTransferPair.expense - incomeExpenseTransferPair.transferExpense
+    private fun calculateBalance(
+        incomeExpenseTransferPair: IncomeExpenseTransferPair,
+        includeTransfers: Boolean = treatTransfersAsIncExp
+    ): BigDecimal {
+        val transferDelta = if (includeTransfers) {
+            incomeExpenseTransferPair.transferIncome - incomeExpenseTransferPair.transferExpense
+        } else {
+            BigDecimal.ZERO
+        }
+        return incomeExpenseTransferPair.income - incomeExpenseTransferPair.expense + transferDelta
     }
 
     private suspend fun export(context: Context) {
@@ -594,6 +599,7 @@ class ReportViewModel @Inject constructor(
                 if (transfersAsIncExp) historyIncomeExpense.transferIncome.toDouble() else 0.0
         expenses = historyIncomeExpense.expense.toDouble() +
                 if (transfersAsIncExp) historyIncomeExpense.transferExpense.toDouble() else 0.0
+        balance = calculateBalance(historyIncomeExpense, includeTransfers = transfersAsIncExp).toDouble()
         treatTransfersAsIncExp = transfersAsIncExp
     }
 
