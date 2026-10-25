@@ -3,6 +3,7 @@ package com.ivy.wallet.domain.pure.data
 import com.ivy.base.time.TimeProvider
 import com.ivy.legacy.utils.ivyMinTime
 import java.time.Instant
+import java.time.LocalTime
 
 data class ClosedTimeRange(
     val from: Instant,
@@ -13,7 +14,10 @@ data class ClosedTimeRange(
             timeProvider: TimeProvider,
         ): ClosedTimeRange = ClosedTimeRange(
             from = ivyMinTime(),
-            to = timeProvider.utcNow(),
+            to = timeProvider.localDateNow()
+                .atTime(LocalTime.MAX)
+                .atZone(timeProvider.getZoneId())
+                .toInstant(),
         )
 
         fun to(to: Instant): ClosedTimeRange = ClosedTimeRange(
