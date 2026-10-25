@@ -162,7 +162,7 @@ private fun TransferAnswerRow(answer: TransferConfirmationWithEvent) {
                     // answer is legible before any of the detail is read. Not
                     // red: a decline is a legitimate answer about money that has
                     // already moved, not an error.
-                    color = if (accepted) UI.colors.green else UI.colors.gray,
+                    color = if (accepted) UI.colors.green else UI.colors.pureInverse,
                     fontWeight = FontWeight.ExtraBold,
                 ),
             )

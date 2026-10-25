@@ -171,6 +171,11 @@ private fun PendingBillCard(
 
                 IvyButton(
                     text = stringResource(R.string.bill_reminder_dismiss),
+                    backgroundGradient = com.ivy.wallet.ui.theme.Gradient.solid(UI.colors.medium),
+                    textStyle = UI.typo.b2.style(
+                        color = UI.colors.pureInverse,
+                        fontWeight = FontWeight.Bold,
+                    ),
                     onClick = onDismiss,
                 )
             }

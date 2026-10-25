@@ -211,7 +211,7 @@ private fun PendingTransferRow(
                 text = stringResource(R.string.pending_transfer_decline),
                 backgroundGradient = Gradient.solid(UI.colors.gray),
                 textStyle = UI.typo.b2.style(
-                    color = UI.colors.gray,
+                    color = UI.colors.pureInverse,
                     fontWeight = FontWeight.Medium
                 )
             ) {

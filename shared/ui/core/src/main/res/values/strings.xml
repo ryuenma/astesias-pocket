@@ -487,7 +487,7 @@
     <string name="bill_paid">Your bill for %1$s %2$s has been paid</string>
     <string name="language">Language</string>
     <string name="advanced_features">Advanced features</string>
-    <string name="get_started">Get started</string>
+    <string name="get_started">Set up wallet</string>
     <string name="import_your_data">Bring your data</string>
     <string name="import_your_data_description">Import a backup from Ivy Wallet, or start with an empty wallet. Everything stays on this device.</string>
     <string name="name_this_profile">Name this profile</string>
@@ -555,5 +555,5 @@
     <string name="transfer_answer_accepted">Accepted</string>
     <string name="transfer_answer_declined">Declined</string>
     <string name="transfer_answers_waiting">%1$d answer(s) you haven\u2019t seen yet</string>
-    <string name="msg_transfer_save_failed">That transfer could not be saved. Nothing was recorded — please try again.</string>
+    <string name="msg_transfer_save_failed">That transfer could not be saved. Nothing was recorded, please try again.</string>
 </resources>

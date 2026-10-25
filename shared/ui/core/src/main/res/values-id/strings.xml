@@ -442,7 +442,7 @@
     <string name="search_tags">Tag Pencarian</string>
     <string name="language">Bahasa</string>
     <string name="budget_exceeded_info">Anggaran terlampaui sebesar %1$s %2$s</string>
-    <string name="get_started">Mulai</string>
+    <string name="get_started">Siapkan dompet</string>
     <string name="import_your_data">Masukkan data Anda</string>
     <string name="import_your_data_description">Impor cadangan dari Ivy Wallet, atau mulai dengan dompet kosong. Semua data tetap di perangkat ini.</string>
     <string name="name_this_profile">Beri nama profil ini</string>
@@ -500,7 +500,7 @@
     <string name="transfer_answer_accepted">Diterima</string>
     <string name="transfer_answer_declined">Ditolak</string>
     <string name="transfer_answers_waiting">%1$d jawaban yang belum kamu lihat</string>
-    <string name="msg_transfer_save_failed">Transfer itu gagal disimpan. Tidak ada yang tercatat — coba lagi.</string>
+    <string name="msg_transfer_save_failed">Transfer itu gagal disimpan. Tidak ada yang tercatat, silakan coba lagi.</string>
 
     <string name="bill_reminder_pending_subtitle">Belum dihitung ke saldo sampai Anda membayarnya.</string>
     <string name="no_pending_transfers">Tidak ada yang perlu dikonfirmasi</string>
