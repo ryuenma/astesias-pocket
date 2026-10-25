@@ -173,7 +173,6 @@ dependencies {
 
     implementation(libs.timber)
     implementation(libs.keval)
-    implementation(libs.bundles.opencsv)
     implementation(libs.androidx.work)
     implementation(libs.androidx.recyclerview)
 

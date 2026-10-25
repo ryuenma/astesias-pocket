@@ -27,6 +27,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -204,12 +205,10 @@ class RootViewModel @Inject constructor(
 
     @Suppress("MagicNumber")
     fun startUserInactiveTimeCounter() {
-        if (userInactiveJob != null && userInactiveJob!!.isActive) return
+        if (userInactiveJob?.isActive == true) return
 
         userInactiveJob = viewModelScope.launch(Dispatchers.IO) {
-            while (userInactiveTime.get() < USER_INACTIVITY_TIME_LIMIT &&
-                userInactiveJob != null && !userInactiveJob?.isCancelled!!
-            ) {
+            while (userInactiveTime.get() < USER_INACTIVITY_TIME_LIMIT && isActive) {
                 delay(1000)
                 userInactiveTime.incrementAndGet()
             }
