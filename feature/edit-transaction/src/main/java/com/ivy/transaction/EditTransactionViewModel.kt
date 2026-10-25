@@ -799,20 +799,6 @@ class EditTransactionViewModel @Inject constructor(
                     // this names whose account it is. Nothing set it, so every
                     // cross-profile save threw and the catch below ate it.
                     counterpartProfileId = toDirectoryAccount?.profileId,
-                    // The one thing that makes a cross-profile transfer SAVE at all.
-                    //
-                    // `toAccountId` is null for a transfer to somebody else, because
-                    // their account lives in their own database and cannot exist here.
-                    // TransactionMapper then refuses the leg outright unless
-                    // counterpartProfileId names who the destination belongs to -
-                    // which is the correct guard, since an ordinary transfer pointing
-                    // at a missing account really is corrupt.
-                    //
-                    // Nothing set it, so every cross-profile save threw, the throw was
-                    // swallowed by the catch below, and the screen closed as though it
-                    // had worked. The mapper, the domain sender-leg builder and the
-                    // outbox all existed and agreed; only the save path was never
-                    // wired to them.
                     toAmount = customExchangeRateState.convertedAmount?.toBigDecimal()
                         ?: amount,
                     title = title?.trim(),
@@ -849,20 +835,7 @@ class EditTransactionViewModel @Inject constructor(
                     accountsChanged = false
                 }
 
-                // A cross-profile transfer CANNOT round-trip through the domain
-                // `Transaction`: `Transfer.toAccount` is a non-null `AccountId`, and
-                // this transfer's destination lives in her ledger, so there is no
-                // local id to give it. The mapper fails its either{} block,
-                // `toDomain(mapper).getOrNull()` turns that into null, and the `?.let`
-                // that used to stand here skipped the write entirely - nothing threw,
-                // nothing was caught, nothing was recorded. That is "Add works but the
-                // transaction is nowhere to be found".
-                //
-                // `CrossProfileTransfer.senderLeg` builds exactly this leg as a raw
-                // TransactionEntity, no domain model involved, with
-                // counterpartProfileId and the correlation id already set. Write it
-                // straight to the WriteTransactionDao, the same way the
-                // owner-confirmation path does.
+                // Cross-profile transfers have no local destination AccountId, so write the sender leg directly via CrossProfileTransfer.senderLeg.
                 val directoryDest = toDirectoryAccount
                 if (directoryDest != null) {
                     val leg = CrossProfileTransfer.senderLeg(

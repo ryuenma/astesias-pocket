@@ -50,13 +50,10 @@ class OnboardingRouter(
         }
     }
 
-    // --------------------------------- Step 1 - Splash ------------------------------------------
     fun splashNext() {
         state.value = OnboardingState.IMPORT
     }
-    // --------------------------------- Step 1 ---------------------------------------------------
 
-    // --------------------------------- Step 2 - Import ------------------------------------------
     fun startImport() {
         // Only the Ivy Wallet backup path remains; the nine third-party CSV
         // importers were removed by owner decision.
@@ -74,15 +71,11 @@ class OnboardingRouter(
             state.value = OnboardingState.CURRENCY
         }
     }
-    // --------------------------------- Step 2 ---------------------------------------------------
 
-    // --------------------------------- Step 3 - Currency ----------------------------------------
     fun currencyNext() {
         state.value = OnboardingState.PROFILE_NAME
     }
-    // --------------------------------- Step 3 ---------------------------------------------------
 
-    // --------------------------------- Step 4 - Profile name -----------------------------------
     fun setProfileNameNext(id: ProfileId, rawName: String, scope: CoroutineScope) {
         val name = rawName.trim().ifBlank { id.value }
         profileRegistry.register(Profile(id = id, name = name))
@@ -107,7 +100,6 @@ class OnboardingRouter(
             transactionReminderLogic.scheduleReminder()
         }
     }
-    // --------------------------------- Step 4 ---------------------------------------------------
 
     private fun navigateOutOfOnboarding() {
         nav.resetBackStack()

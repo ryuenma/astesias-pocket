@@ -64,21 +64,7 @@ class DirectorySyncRepository @Inject constructor(
         val envelope = api.fetchDirectory() ?: return false
         val remote = envelope.items
 
-        // A SHORT page is not a small directory, and the difference decides
-        // whether the cache is allowed to be rewritten.
-        //
-        // PocketBase pages every list, so a fetch can come back complete-looking
-        // and still be one page of several. Clearing and re-inserting from such
-        // a response DELETES every row past the page boundary - rows this device
-        // already had and that this response cannot restore - and the deletion is
-        // silent, because the log below counts what was fetched. Measured live
-        // 2026-10-13: 31 rows on the server, 30 fetched, one real account gone
-        // from the picker.
-        //
-        // So a response that does not account for every row it says exists is
-        // treated as no response at all: the cache is left exactly as it was and
-        // the next refresh tries again. Refusing is the safe direction - a stale
-        // row is a visible, correctable problem, whereas a deleted row is neither.
+        // Refuse partial pages so cached rows past the page boundary are never deleted.
         if (remote.size < envelope.totalItems) {
             Timber.w(
                 "Directory fetch short: ${remote.size} of ${envelope.totalItems} row(s); " +
