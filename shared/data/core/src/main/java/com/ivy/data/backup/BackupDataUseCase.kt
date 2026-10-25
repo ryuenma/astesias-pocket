@@ -110,7 +110,7 @@ class BackupDataUseCase @Inject constructor(
             val tags = async { tagsReader.findAll() }
             val tagAssociations = async { tagAssociationReader.findAll() }
 
-            val completeData = IvyWalletCompleteData(
+            val completeData = AstesiaWalletCompleteData(
                 accounts = accounts.await(),
                 budgets = budgets.await(),
                 categories = categories.await(),
@@ -244,7 +244,7 @@ class BackupDataUseCase @Inject constructor(
     ): ImportResult {
         val accommodated = accommodateExistingAccountsAndCategories(jsonString)
         val ivyWalletCompleteData = accommodated?.let {
-            json.decodeFromString<IvyWalletCompleteData>(it.json)
+            json.decodeFromString<AstesiaWalletCompleteData>(it.json)
         } ?: error("Failed to parse backup JSON.")
 
         onProgress(0.4)
@@ -270,7 +270,7 @@ class BackupDataUseCase @Inject constructor(
     ): AccommodatedBackup? {
         if (jsonString == null) return null
 
-        val ivyWalletCompleteData = json.decodeFromString<IvyWalletCompleteData>(jsonString)
+        val ivyWalletCompleteData = json.decodeFromString<AstesiaWalletCompleteData>(jsonString)
         val plan = getReplacementPairs(ivyWalletCompleteData)
 
         // Typed explicitly rather than inferred from the `String?` parameter:
@@ -288,7 +288,7 @@ class BackupDataUseCase @Inject constructor(
     }
 
     private suspend fun insertDataToDb(
-        completeData: IvyWalletCompleteData,
+        completeData: AstesiaWalletCompleteData,
         onProgress: suspend (progressPercent: Double) -> Unit = {}
     ) {
         withContext(dispatchersProvider.io) {
@@ -298,14 +298,17 @@ class BackupDataUseCase @Inject constructor(
             val accounts = async {
                 val domainAccounts = with(accountMapper) {
                     completeData.accounts.mapNotNull { entity ->
-                        entity.toDomain().getOrNull()
+                        entity.copy(icon = sanitizeBackupIcon(entity.icon)).toDomain().getOrNull()
                     }
                 }
                 accountRepository.saveMany(domainAccounts)
             }
             val budgets = async { budgetWriter.saveMany(completeData.budgets) }
-            val categories =
-                async { categoryWriter.saveMany(completeData.categories) }
+            val categories = async {
+                categoryWriter.saveMany(
+                    completeData.categories.map { it.copy(icon = sanitizeBackupIcon(it.icon)) }
+                )
+            }
             accounts.await()
             budgets.await()
             categories.await()
@@ -472,7 +475,7 @@ class BackupDataUseCase @Inject constructor(
      * Ambiguous names are returned rather than resolved; see [replacementPlan].
      */
     private suspend fun getReplacementPairs(
-        completeData: IvyWalletCompleteData
+        completeData: AstesiaWalletCompleteData
     ): ReplacementPlan {
         return withContext(dispatchersProvider.io) {
             val existingAccountsList = accountDao.findAll()
@@ -524,5 +527,10 @@ class BackupDataUseCase @Inject constructor(
 
     private fun clearCacheDir() {
         context.cacheDir.deleteRecursively()
+    }
+
+    companion object {
+        internal fun sanitizeBackupIcon(icon: String?): String? =
+            icon?.trim()?.replace(" ", "_")?.lowercase()?.takeIf { it.isNotBlank() }
     }
 }

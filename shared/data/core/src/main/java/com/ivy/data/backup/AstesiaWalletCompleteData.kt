@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 @Keep
 @Serializable
 @Suppress("DataClassDefaultValues")
-data class IvyWalletCompleteData(
+data class AstesiaWalletCompleteData(
     @SerialName("accounts")
     val accounts: List<AccountEntity> = emptyList(),
     @SerialName("budgets")
@@ -41,3 +41,5 @@ data class IvyWalletCompleteData(
     @SerialName("tagAssociations")
     val tagAssociations: List<TagAssociationEntity> = emptyList()
 )
+
+typealias IvyWalletCompleteData = AstesiaWalletCompleteData

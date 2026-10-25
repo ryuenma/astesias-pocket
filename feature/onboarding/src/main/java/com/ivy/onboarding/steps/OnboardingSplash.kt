@@ -56,7 +56,7 @@ fun BoxWithConstraintsScope.OnboardingSplash(
 
         Image(
             modifier = Modifier.size(width = 113.dp, height = 96.dp),
-            painter = painterResource(id = R.drawable.ivy_wallet_logo),
+            painter = painterResource(id = R.drawable.astesia_wallet_logo),
             contentScale = ContentScale.FillBounds,
             contentDescription = "Astesia’s Pocket logo",
         )

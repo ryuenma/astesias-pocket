@@ -534,7 +534,7 @@ class ReportViewModel @Inject constructor(
         if (!filter.validate()) return
 
         ivyContext.createNewFile(
-            "IvyWalletReport-${
+            "AstesiaWalletReport-${
                 timeNowUTC().getISOFormattedDateTime()
             }.csv"
         ) { fileUri ->

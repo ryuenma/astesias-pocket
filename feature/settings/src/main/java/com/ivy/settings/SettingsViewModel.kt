@@ -469,7 +469,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun exportToCSV(rootScreen: RootScreen) {
         ivyContext.createNewFile(
-            "IvyWalletExport_${
+            "AstesiaWalletExport_${
                 timeNowUTC().getISOFormattedDateTime()
             }.csv"
         ) { fileUri ->
@@ -487,7 +487,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun exportToXlsx(rootScreen: RootScreen) {
         ivyContext.createNewFile(
-            "IvyWalletExport_${
+            "AstesiaWalletExport_${
                 timeNowUTC().getISOFormattedDateTime()
             }.xlsx"
         ) { fileUri ->
@@ -508,7 +508,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun exportToZip(rootScreen: RootScreen) {
         ivyContext.createNewFile(
-            "IvyWalletBackup_${
+            "AstesiaWalletBackup_${
                 timeNowUTC().getISOFormattedDateTime()
             }.zip"
         ) { fileUri ->

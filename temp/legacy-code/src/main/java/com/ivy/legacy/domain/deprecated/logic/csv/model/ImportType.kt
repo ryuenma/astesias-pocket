@@ -22,7 +22,7 @@ enum class ImportType {
     fun appId(): String = "com.ivy.wallet"
 
     @DrawableRes
-    fun logo(): Int = R.drawable.ivywallet_logo
+    fun logo(): Int = R.drawable.astesiawallet_logo
 
     /**
      * Names the app a file comes FROM. Still "Ivy Wallet" on purpose: this

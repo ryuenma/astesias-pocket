@@ -1,5 +1,6 @@
 package com.ivy.data.repository.mapper
 
+import com.ivy.data.backup.BackupDataUseCase
 import com.ivy.data.db.entity.AccountEntity
 import com.ivy.data.db.entity.CategoryEntity
 import com.ivy.data.model.primitive.AssetCode
@@ -15,7 +16,7 @@ import java.util.UUID
 class IconRestoreMapperTest {
 
     @Test
-    fun `AccountMapper and CategoryMapper preserve icons containing spaces or uppercase (#3177)`() = runTest {
+    fun `sanitizeBackupIcon preserves backup icons containing spaces or uppercase (#3177)`() = runTest {
         val currencyRepo = mockk<CurrencyRepository> {
             coEvery { getBaseCurrency() } returns AssetCode.unsafe("IDR")
         }
@@ -26,13 +27,13 @@ class IconRestoreMapperTest {
             name = "Bank BCA",
             currency = "IDR",
             color = 1,
-            icon = "account balance",
+            icon = BackupDataUseCase.sanitizeBackupIcon("account balance"),
             id = UUID.randomUUID()
         )
         val catEntity = CategoryEntity(
             name = "Food",
             color = 1,
-            icon = "Food Drinks",
+            icon = BackupDataUseCase.sanitizeBackupIcon("Food Drinks"),
             id = UUID.randomUUID()
         )
 
