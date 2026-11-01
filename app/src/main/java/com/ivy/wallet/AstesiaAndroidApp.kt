@@ -26,8 +26,13 @@ class IvyAndroidApp : Application(), Configuration.Provider {
         super.onCreate()
         appContext = this
 
-        if (BuildConfig.DEBUG) {
-            Timber.plant(DebugTree())
-        }
+        // Planted in EVERY build type, not just debug. A release APK that logs
+        // nothing cannot be diagnosed from the device: the only evidence left is
+        // the sync server's request log, which cannot say which code path gave up
+        // or why. The cost is logcat noise; the cost of the alternative is a bug
+        // that has to be reproduced on a developer machine that is not the device
+        // that failed. Nothing secret is logged - no credential reaches a Timber
+        // call - so this is a diagnosability choice, not a privacy one.
+        Timber.plant(DebugTree())
     }
 }

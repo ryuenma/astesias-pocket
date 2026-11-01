@@ -21,3 +21,12 @@
 # R8 full mode strips generic signatures from return types if not kept.
 -if interface * { @retrofit2.http.* public *** *(...); }
 -keep,allowoptimization,allowshrinking,allowobfuscation class <3>
+
+# Timber's DebugTree takes its tag from the calling class name, and R8 renames
+# classes in release. Without these the sync/transfer log lines arrive as
+# `a.b.c` and the diagnosability this fork depends on is gone. Class names only -
+# members stay obfuscated, so the size cost is negligible.
+-keepnames class com.ivy.data.sync.**
+-keepnames class com.ivy.domain.usecase.transfer.**
+-keepnames class com.ivy.transaction.pending.**
+-keepnames class com.ivy.transaction.answers.**
