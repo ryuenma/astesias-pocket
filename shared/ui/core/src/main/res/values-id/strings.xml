@@ -462,7 +462,7 @@
 
     <!-- Sinkronisasi -->
     <string name="sync_server">Sinkronkan dengan pasangan</string>
-    <string name="sync_server_explainer">Masuk untuk berbagi daftar akun, agar transfer ke pasangan bisa menunjuk tujuan yang nyata. Kata sandi hanya dipakai sekali dan tidak pernah disimpan.</string>
+    <string name="sync_server_explainer">Masuk untuk berbagi daftar akun, agar transfer ke pasangan bisa menunjuk tujuan yang nyata. Kata sandi hanya dipakai sekali dan tidak pernah disimpan. Setiap profil dibuat di server oleh pengelolanya — masuk di sini tidak membuat profil baru.</string>
     <string name="sync_server_url_hint">Alamat server</string>
     <string name="sync_server_email_hint">Email</string>
     <string name="sync_server_password_hint">Kata sandi</string>

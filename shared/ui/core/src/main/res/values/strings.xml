@@ -516,7 +516,7 @@
 
     <!-- Sync server -->
     <string name="sync_server">Sync with your partner</string>
-    <string name="sync_server_explainer">Sign in to share your account list, so a transfer to them can name a real destination. Your password is used once and never stored.</string>
+    <string name="sync_server_explainer">Sign in to share your account list, so a transfer to them can name a real destination. Your password is used once and never stored. Each profile is created on the server by whoever runs it — signing in here does not create one.</string>
     <string name="sync_server_url_hint">Server address</string>
     <string name="sync_server_email_hint">Email</string>
     <string name="sync_server_password_hint">Password</string>
