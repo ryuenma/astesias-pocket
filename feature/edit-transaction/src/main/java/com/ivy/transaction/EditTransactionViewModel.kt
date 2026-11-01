@@ -464,6 +464,16 @@ class EditTransactionViewModel @Inject constructor(
         toAccount = transaction.toAccountId?.let {
             accountByIdAct(it)
         }
+        // A cross-profile transfer has no LOCAL destination: its toAccountId names
+        // HER account, which this device does not hold, so `toAccount` above is null
+        // by design. Restoring nothing here left both sides null, the mapper refused
+        // the save, and the transfer could be created but never edited - every change
+        // was rejected with no visible reason.
+        toDirectoryAccount = transaction.counterpartProfileId?.let { profileId ->
+            transaction.toAccountId?.let { accountId ->
+                directoryRepository.account(profileId, accountId)
+            }
+        }
         category = transaction.categoryId?.let {
             categoryRepository.findById(CategoryId(it))
         }

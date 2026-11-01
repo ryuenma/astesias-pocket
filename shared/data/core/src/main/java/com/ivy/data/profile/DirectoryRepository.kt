@@ -3,6 +3,7 @@ package com.ivy.data.profile
 import com.ivy.data.db.dao.read.DirectoryAccountDao
 import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.sync.SyncConfig
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,4 +46,15 @@ class DirectoryRepository @Inject constructor(
         val own = config.profileId ?: return emptyList()
         return directoryAccountDao.findOthers(own)
     }
+
+    /**
+     * One account from the published directory, named by the PAIR that identifies it.
+     *
+     * The pair and not the profile alone: a profile publishes as many accounts as it
+     * has, so looking up by profile and taking the first would restore the wrong
+     * destination onto an edited cross-profile transfer - a transfer that then points
+     * at her savings account because it was listed before her wallet.
+     */
+    suspend fun account(profileId: String, accountId: UUID): DirectoryAccountEntity? =
+        directoryAccountDao.findByAccountId(profileId, accountId.toString())
 }

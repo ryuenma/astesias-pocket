@@ -102,4 +102,30 @@ class DirectoryRepositoryTest {
         // there is no id to exclude and an unfiltered query would list every row.
         coVerify(exactly = 0) { dao.findOthers(any()) }
     }
+
+    @Test
+    fun `an account is found by the pair, not by the profile alone`() = runTest {
+        // Her profile publishes more than one account. A lookup on profileId alone
+        // would restore whichever of them happened to be listed first onto an edited
+        // cross-profile transfer, so the assertion is on WHICH row comes back.
+        val savings = row("33333333-3333-4333-8333-333333333333", "so", "Tabungan Zahwa")
+        val wallet = row("44444444-4444-4444-8444-444444444444", "so", "Gopay Zahwa")
+        val rows = listOf(savings, wallet)
+
+        coEvery { dao.findByAccountId(any(), any()) } answers {
+            rows.firstOrNull {
+                it.profileId == firstArg<String>() && it.accountId.toString() == secondArg<String>()
+            }
+        }
+
+        val repo = DirectoryRepository(dao, config)
+
+        repo.account("so", wallet.accountId) shouldBe wallet
+        repo.account("so", savings.accountId) shouldBe savings
+        repo.account(
+            "so",
+            UUID.fromString("55555555-5555-4555-8555-555555555555"),
+        ) shouldBe null
+        coVerify(exactly = 1) { dao.findByAccountId("so", wallet.accountId.toString()) }
+    }
 }
