@@ -2,7 +2,7 @@ package com.ivy.domain.usecase.transfer
 
 import com.ivy.data.db.dao.read.PendingTransferDao
 import com.ivy.data.db.dao.read.PendingTransferWrite
-import com.ivy.data.db.dao.write.WriteTransactionDao
+import com.ivy.data.db.transfer.TransferDecisionWriter
 import com.ivy.data.db.entity.PendingTransferEntity
 import timber.log.Timber
 import java.util.UUID
@@ -17,12 +17,10 @@ import javax.inject.Singleton
  * `correlationId`. Both are needed and neither is sufficient alone - see
  * `Migration132to133_PendingTransfers` for that argument in full.
  *
- * NOT YET WIRED UP: [onEventArrived] is the only thing that inserts, and nothing
- * calls it. There is no transfer-events endpoint on the sync client, so no row is
- * ever inserted and the inbox is always empty in practice. Reading it and acting
- * on it work, but they have nothing to act on: every guarantee below - the
- * primary key, the IGNORE insert, the guarded decision - is tested and correct,
- * and unexercised by the app as it stands.
+ * WIRED UP: [TransferEventSync] calls [onEventArrived] for every event a pull
+ * delivers, and `PendingTransfersScreen` calls [decide] for every tap. (An earlier
+ * revision of this comment claimed nothing called it and the inbox was always
+ * empty; that was already false when it was written.)
  *
  * Everything here returns a value describing what happened rather than throwing.
  * A failure to sync must never take down a wallet, and the counterpart's inbox
@@ -31,7 +29,7 @@ import javax.inject.Singleton
 @Singleton
 class PendingTransferRepository @Inject constructor(
     private val dao: PendingTransferDao,
-    private val transactionDao: WriteTransactionDao,
+    private val decisionWriter: TransferDecisionWriter,
 ) {
 
     /**
@@ -108,23 +106,16 @@ class PendingTransferRepository @Inject constructor(
             return TransferInbox.Decision.NoChange
         }
 
-        // Guarded on PENDING, so a double-tap writes nothing the second time.
-        val rows = dao.markDecided(
+        // Both writes go through one Room transaction: the decision is only
+        // recorded if the ledger row lands with it. Separate statements used to
+        // leave a transfer ACCEPTED with no row and no way to retry.
+        val applied = decisionWriter.decideAndWrite(
             correlationId = correlationId,
             state = when (decision) {
                 TransferInbox.Decision.Accept -> PendingTransferState.ACCEPTED.name
                 else -> PendingTransferState.DECLINED.name
-            }
-        )
-        if (!PendingTransferWrite.decisionApplied(rows)) {
-            // Lost the race against a concurrent tap. Her decision is already
-            // recorded, so writing the ledger row now could double it.
-            Timber.i("Decision on $correlationId already applied elsewhere; not repeating")
-            return TransferInbox.Decision.NoChange
-        }
-
-        if (decision.touchesLedger()) {
-            transactionDao.save(
+            },
+            leg = if (decision.touchesLedger()) {
                 CrossProfileTransfer.receiverLeg(
                     legId = confirmedLegId,
                     correlationId = correlationId,
@@ -136,7 +127,18 @@ class PendingTransferRepository @Inject constructor(
                     title = item.title,
                     description = item.description,
                 )
-            )
+            } else {
+                null
+            },
+        )
+        if (!applied) {
+            // Lost the race against a concurrent tap. Her decision is already
+            // recorded, so writing the ledger row now could double it.
+            Timber.i("Decision on $correlationId already applied elsewhere; not repeating")
+            return TransferInbox.Decision.NoChange
+        }
+
+        if (decision.touchesLedger()) {
             Timber.i("Transfer $correlationId confirmed into ledger as $confirmedLegId")
         } else {
             Timber.i("Transfer $correlationId declined; her ledger untouched")

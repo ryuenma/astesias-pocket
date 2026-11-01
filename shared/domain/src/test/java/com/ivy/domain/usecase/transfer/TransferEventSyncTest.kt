@@ -2,7 +2,7 @@ package com.ivy.domain.usecase.transfer
 
 import com.ivy.data.db.dao.read.AccountDao
 import com.ivy.data.db.dao.read.PendingTransferDao
-import com.ivy.data.db.dao.write.WriteTransactionDao
+import com.ivy.data.db.transfer.TransferDecisionWriter
 import com.ivy.data.db.entity.AccountEntity
 import com.ivy.data.sync.DirectorySyncApi
 import com.ivy.data.sync.SyncConfig
@@ -33,7 +33,7 @@ class TransferEventSyncTest {
     private val profilesApi: DirectorySyncApi = mockk()
     private val outbox: TransferOutboxRepository = mockk(relaxed = true)
     private val pendingDao: PendingTransferDao = mockk(relaxed = true)
-    private val transactionDao: WriteTransactionDao = mockk(relaxed = true)
+    private val decisionWriter: TransferDecisionWriter = mockk(relaxed = true)
     private val accounts: AccountDao = mockk()
     private val config: SyncConfig = mockk(relaxed = true)
 
@@ -42,7 +42,7 @@ class TransferEventSyncTest {
 
     private val answers: TransferConfirmationRepository = mockk(relaxed = true)
 
-    private val pendingTransfers = PendingTransferRepository(pendingDao, transactionDao)
+    private val pendingTransfers = PendingTransferRepository(pendingDao, decisionWriter)
 
     private fun sync() = TransferEventSync(
         api = api,
@@ -131,7 +131,7 @@ class TransferEventSyncTest {
 
         sync().pullEvents()
 
-        coVerify(exactly = 0) { transactionDao.save(any()) }
+        coVerify(exactly = 0) { decisionWriter.decideAndWrite(any(), any(), any()) }
     }
 
     @Test
@@ -376,7 +376,7 @@ class TransferEventSyncTest {
         sync().pullEvents() shouldBe TransferEventSync.PullResult.Unreachable
 
         coVerify(exactly = 0) { pendingDao.insertIfAbsent(any()) }
-        coVerify(exactly = 0) { transactionDao.save(any()) }
+        coVerify(exactly = 0) { decisionWriter.decideAndWrite(any(), any(), any()) }
     }
 
     @Test
@@ -415,7 +415,7 @@ class TransferEventSyncTest {
 
         sync().pullConfirmations()
 
-        coVerify(exactly = 0) { transactionDao.save(any()) }
+        coVerify(exactly = 0) { decisionWriter.decideAndWrite(any(), any(), any()) }
         coVerify(exactly = 0) { pendingDao.insertIfAbsent(any()) }
     }
 
