@@ -98,6 +98,23 @@ import javax.inject.Inject
  */
 private val DEFAULT_TIME_OF_DAY: LocalTime = LocalTime.of(12, 0)
 
+/**
+ * The instant to stamp on a transaction the user never gave a time to.
+ *
+ * TODAY, at local noon - not the instant the save button was pressed. The bare
+ * instant is wrong by up to a day: a transaction recorded at 02:00 in Jakarta
+ * (UTC+7) is 19:00 the previous day in UTC and gets filed under yesterday, while
+ * the same 02:00 in a UTC-5 zone files tomorrow. Noon is far enough from both
+ * midnights that one date can only mean one day, which is exactly why the date
+ * picker already used it - the create path simply never asked.
+ */
+internal fun defaultTransactionDateTime(
+    nowUtc: Instant,
+    timeConverter: TimeConverter,
+): Instant = with(timeConverter) {
+    nowUtc.toLocalDate().atTime(DEFAULT_TIME_OF_DAY).toUTC()
+}
+
 @HiltViewModel
 class EditTransactionViewModel @Inject constructor(
     @ApplicationContext
@@ -810,7 +827,13 @@ class EditTransactionViewModel @Inject constructor(
                     dateTime = when {
                         loadedTransaction().dateTime == null &&
                                 dueDate == null -> {
-                            timeProvider.utcNow()
+                            // Not `utcNow()`: that is the instant of saving, and a
+                            // save at 02:00 in Jakarta is 19:00 the PREVIOUS day in
+                            // UTC, so the transaction was filed under yesterday.
+                            defaultTransactionDateTime(
+                                nowUtc = timeProvider.utcNow(),
+                                timeConverter = timeConverter,
+                            )
                         }
 
                         else -> loadedTransaction().dateTime
