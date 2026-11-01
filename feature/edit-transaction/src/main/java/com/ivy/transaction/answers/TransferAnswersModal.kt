@@ -58,6 +58,7 @@ import java.time.format.DateTimeFormatter
 fun BoxScope.TransferAnswersModal(
     visible: Boolean,
     answers: List<TransferConfirmationWithEvent>,
+    refresh: AnswersRefresh,
     onDismiss: () -> Unit,
 ) {
     IvyModal(
@@ -103,7 +104,7 @@ fun BoxScope.TransferAnswersModal(
         Spacer(Modifier.height(24.dp))
 
         if (answers.isEmpty()) {
-            NoAnswersYet()
+            NoAnswersYet(refresh = refresh)
         } else {
             LazyColumn(
                 // Bounded so a long history scrolls rather than growing the
@@ -119,7 +120,7 @@ fun BoxScope.TransferAnswersModal(
 }
 
 @Composable
-private fun NoAnswersYet() {
+private fun NoAnswersYet(refresh: AnswersRefresh) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -133,6 +134,24 @@ private fun NoAnswersYet() {
                 fontWeight = FontWeight.ExtraBold,
             ),
         )
+
+        // An empty list is only good news when the check actually ran. If it did
+        // not, saying nothing is a claim that nobody has answered - which is how
+        // an accepted transfer looked ignored for two weeks.
+        val caveat = when (refresh) {
+            AnswersRefresh.Unreachable -> R.string.transfer_answers_unreachable
+            AnswersRefresh.NotConfigured -> R.string.transfer_answers_not_configured
+            AnswersRefresh.Succeeded, AnswersRefresh.NotAttempted -> null
+        }
+        if (caveat != null) {
+            Text(
+                text = stringResource(caveat),
+                style = UI.typo.c.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.Medium,
+                ),
+            )
+        }
     }
 }
 

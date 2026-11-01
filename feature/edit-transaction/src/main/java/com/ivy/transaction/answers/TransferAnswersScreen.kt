@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import com.ivy.data.db.entity.TransferConfirmationWithEvent
 import com.ivy.data.sync.TransferOutboxRepository
 import com.ivy.domain.usecase.transfer.TransferConfirmationRepository
+import com.ivy.domain.usecase.transfer.TransferConfirmationRepository.AnswerPullResult
 import com.ivy.domain.usecase.transfer.TransferEventSync
 import com.ivy.navigation.TransferAnswersScreen
 import com.ivy.navigation.navigation
@@ -50,7 +51,18 @@ class TransferAnswersViewModel @Inject constructor(
         persistentListOf()
     )
 
+    /**
+     * What the last refresh actually managed to do.
+     *
+     * Without this, "the server could not be read" renders exactly like "nothing
+     * has been answered yet" - and the pull result was being thrown away, so an
+     * unreachable server and a quiet partner looked identical on screen.
+     */
+    private val refresh = mutableStateOf(AnswersRefresh.NotAttempted)
+
     val answers: ImmutableList<TransferConfirmationWithEvent> get() = items.value
+
+    val refreshState: AnswersRefresh get() = refresh.value
 
     /**
      * Refreshes the list and then marks it read.
@@ -72,8 +84,10 @@ class TransferAnswersViewModel @Inject constructor(
             runCatching { outbox.drain() }
                 .onFailure { Timber.e(it, "Could not drain the transfer outbox") }
 
-            runCatching { eventSync.pullConfirmations() }
+            val pulled = runCatching { eventSync.pullConfirmations() }
                 .onFailure { Timber.e(it, "Could not pull transfer confirmations") }
+                .getOrElse { AnswerPullResult.Unreachable }
+            refresh.value = pulled.toRefresh()
 
             val loaded = runCatching {
                 repository.answered().toImmutableList()
@@ -95,6 +109,33 @@ class TransferAnswersViewModel @Inject constructor(
                 .onFailure { Timber.e(it, "Could not acknowledge transfer answers") }
         }
     }
+}
+
+/**
+ * Whether the answers on screen were actually checked against the server.
+ *
+ * An empty list means one of two completely different things, and the screen used
+ * to render both as "no answers yet": nothing has been answered, or the check never
+ * happened. The second is the case that made an accepted transfer look ignored.
+ */
+enum class AnswersRefresh {
+    NotAttempted,
+    Succeeded,
+    Unreachable,
+    NotConfigured,
+}
+
+/**
+ * The pull result as the screen needs to read it.
+ *
+ * Pulled is [AnswersRefresh.Succeeded] even when it recorded nothing: zero answers
+ * from a server that answered is a FACT, and the screen may say so. Only a pull that
+ * never happened may not claim it.
+ */
+internal fun AnswerPullResult.toRefresh(): AnswersRefresh = when (this) {
+    is AnswerPullResult.Pulled -> AnswersRefresh.Succeeded
+    AnswerPullResult.Unreachable -> AnswersRefresh.Unreachable
+    AnswerPullResult.NotConfigured -> AnswersRefresh.NotConfigured
 }
 
 /**
@@ -135,6 +176,7 @@ fun BoxWithConstraintsScope.TransferAnswersScreen(screen: TransferAnswersScreen)
         TransferAnswersModal(
             visible = true,
             answers = viewModel.answers,
+            refresh = viewModel.refreshState,
             // Done, the close control and the system back gesture all mean the
             // same thing here: she has finished looking.
             onDismiss = { nav.back() },
