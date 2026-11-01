@@ -1,6 +1,7 @@
 package com.ivy.data.profile
 
 import com.ivy.base.legacy.SharedPrefs
+import com.ivy.data.db.IvyRoomDatabase
 import com.ivy.data.file.FileSystem
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -106,7 +107,8 @@ class ProfileRegistry @Inject constructor(
      * True when [id] owns a database file on disk. Used to tell "profile created but
      * never set up" apart from "profile with data in it" without opening the database.
      */
-    fun hasLocalData(id: ProfileId): Boolean = fileSystem.databaseExists(id.dbFileName)
+    fun hasLocalData(id: ProfileId): Boolean =
+        fileSystem.databaseExists(IvyRoomDatabase.dbFileNameFor(id))
 
     private fun defaultProfile() = Profile(ProfileId.DEFAULT, DEFAULT_PROFILE_NAME)
 

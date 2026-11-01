@@ -172,6 +172,17 @@ class ProfileRegistryTest {
     }
 
     @Test
+    fun `hasLocalData sees the legacy filename the default profile actually opens`() {
+        // The opener uses LEGACY_DB_NAME ("ivywallet.db") for DEFAULT, while
+        // ProfileId.dbFileName says "default.db". The registry must answer with the
+        // opener's name, or the profile holding the owner's real ledger reports
+        // "no data" and the app offers to create a wallet it already has.
+        files.add(com.ivy.data.db.IvyRoomDatabase.LEGACY_DB_NAME)
+
+        registry.hasLocalData(ProfileId.DEFAULT) shouldBe true
+    }
+
+    @Test
     fun `the default profile keeps Ivy Wallet's original filename`() {
         // Not a property of the registry, but the reason existing installs keep their
         // data; asserted here so the mapping is covered by a test that runs.

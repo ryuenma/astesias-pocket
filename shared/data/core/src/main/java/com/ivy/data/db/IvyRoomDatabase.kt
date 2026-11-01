@@ -200,13 +200,24 @@ abstract class IvyRoomDatabase : RoomDatabase() {
          * [com.ivy.data.profile.ProfileSwitcher] therefore restarts the process
          * instead. See that class for the full reasoning.
          */
+        /**
+         * The database file [profileId] actually opens.
+         *
+         * This is the one place that mapping is written. `ProfileRegistry.hasLocalData`
+         * used to derive the name itself from [ProfileId.dbFileName], which returns
+         * `default.db` - while this opener has always used [LEGACY_DB_NAME] for
+         * [ProfileId.DEFAULT]. The two answers disagreed, so the profile holding the
+         * owner's real ledger reported `hasLocalData == false` forever.
+         */
+        fun dbFileNameFor(profileId: ProfileId): String =
+            if (profileId == ProfileId.DEFAULT) LEGACY_DB_NAME else profileId.dbFileName
+
         @Suppress("SpreadOperator")
         fun create(
             applicationContext: Context,
             profileId: ProfileId,
         ): IvyRoomDatabase {
-            val dbName =
-                if (profileId == ProfileId.DEFAULT) LEGACY_DB_NAME else profileId.dbFileName
+            val dbName = dbFileNameFor(profileId)
             return Room
                 .databaseBuilder(
                     applicationContext,
