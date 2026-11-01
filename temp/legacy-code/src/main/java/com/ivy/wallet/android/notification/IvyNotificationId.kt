@@ -42,6 +42,20 @@ object IvyNotificationId {
     const val BILL_REMINDER_BASE = 2_000
 
     /**
+     * The single id for "transfers are waiting for you".
+     *
+     * One id, because the notification is an aggregate ("3 transfers waiting") and
+     * re-notifying must UPDATE that line rather than stack copies of it.
+     *
+     * Taken from the reminder block rather than the bill block: the bill block runs
+     * to Int.MAX_VALUE by design (see [BILL_REMINDER_SLOTS]), so carving anything
+     * out of it would change every bill's id and strand the notifications already
+     * posted under the old ones. 1_500 sits well clear of the daily reminder at
+     * 1_000 and of the bill block's start at 2_000.
+     */
+    const val INCOMING_TRANSFER: Int = 1_500
+
+    /**
      * Size of the bill block, and therefore the modulus.
      *
      * As large as a positive notification id can be, which is the point. An

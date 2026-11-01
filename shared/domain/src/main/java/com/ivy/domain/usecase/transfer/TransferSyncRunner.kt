@@ -23,10 +23,10 @@ class TransferSyncRunner @Inject constructor(
     private val outbox: TransferOutboxRepository,
     private val eventSync: TransferEventSync,
 ) {
-    suspend fun runOnce(): Boolean {
+    suspend fun runOnce(): SyncReport {
         if (!config.isConfigured) {
             Timber.i("Transfer sync skipped: sync is not configured.")
-            return false
+            return SyncReport(ran = false)
         }
 
         runCatching { directorySync.publishLocalAccounts() }
@@ -38,12 +38,37 @@ class TransferSyncRunner @Inject constructor(
         runCatching { outbox.drain() }
             .onFailure { Timber.e(it, "Transfer sync: outbox drain failed") }
 
-        runCatching { eventSync.pullEvents() }
+        // The results are kept rather than dropped: a caller that cannot tell "the
+        // pull brought nothing" from "the pull brought three transfers" cannot
+        // notify anyone, which is exactly how an incoming transfer sat unannounced
+        // until the owner opened the app on a hunch.
+        val events = runCatching { eventSync.pullEvents() }
             .onFailure { Timber.e(it, "Transfer sync: pullEvents failed") }
+            .getOrNull()
 
-        runCatching { eventSync.pullConfirmations() }
+        val answers = runCatching { eventSync.pullConfirmations() }
             .onFailure { Timber.e(it, "Transfer sync: pullConfirmations failed") }
+            .getOrNull()
 
-        return true
+        return SyncReport(
+            ran = true,
+            newTransfers = (events as? TransferEventSync.PullResult.Pulled)?.newItems ?: 0,
+            newAnswers = (answers as? TransferConfirmationRepository.AnswerPullResult.Pulled)
+                ?.recorded ?: 0,
+        )
     }
 }
+
+/**
+ * What one sync pass did.
+ *
+ * [ran] is false only for a device that has no server; the counts are what arrived,
+ * and they are zero for a pass that failed as well as for a quiet one. That is
+ * deliberate: a failure is logged where it happens, and nothing may be notified
+ * about a pass that could not read the server.
+ */
+data class SyncReport(
+    val ran: Boolean,
+    val newTransfers: Int = 0,
+    val newAnswers: Int = 0,
+)

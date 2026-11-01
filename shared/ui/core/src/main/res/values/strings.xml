@@ -558,4 +558,9 @@
     <string name="msg_transfer_save_failed">That transfer could not be saved. Nothing was recorded, please try again.</string>
     <string name="transfer_answers_unreachable">Could not reach the server, so this list may be out of date.</string>
     <string name="transfer_answers_not_configured">Sync is off on this device, so answers cannot be checked.</string>
+    <string name="incoming_transfer_title">Incoming transfer</string>
+    <plurals name="incoming_transfer_body">
+        <item quantity="one">A transfer is waiting for your confirmation.</item>
+        <item quantity="other">%1$d transfers are waiting for your confirmation.</item>
+    </plurals>
 </resources>

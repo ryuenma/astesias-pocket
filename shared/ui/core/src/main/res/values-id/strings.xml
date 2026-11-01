@@ -558,4 +558,9 @@
     <string name="your_data_will_be_saved_only_locally">Data Anda hanya disimpan secara lokal di perangkat ini. Jika Anda menghapus aplikasi atau berganti perangkat, data Anda dapat hilang. Untuk mencegahnya, ekspor cadangan secara berkala.</string>
     <string name="transfer_answers_unreachable">Tidak bisa menghubungi server, jadi daftar ini mungkin belum terbaru.</string>
     <string name="transfer_answers_not_configured">Sinkronisasi mati di perangkat ini, jadi jawaban tidak bisa diperiksa.</string>
+    <string name="incoming_transfer_title">Transfer masuk</string>
+    <plurals name="incoming_transfer_body">
+        <item quantity="one">Ada transfer yang menunggu konfirmasi Anda.</item>
+        <item quantity="other">%1$d transfer menunggu konfirmasi Anda.</item>
+    </plurals>
 </resources>

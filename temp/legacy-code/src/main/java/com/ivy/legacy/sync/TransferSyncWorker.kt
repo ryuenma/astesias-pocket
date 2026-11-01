@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.ivy.domain.usecase.transfer.TransferSyncRunner
+import com.ivy.legacy.notification.TransferNotifier
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -28,6 +29,7 @@ class TransferSyncWorker(
     @InstallIn(SingletonComponent::class)
     interface WorkerEntryPoint {
         fun transferSyncRunner(): TransferSyncRunner
+        fun transferNotifier(): TransferNotifier
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -35,7 +37,13 @@ class TransferSyncWorker(
             applicationContext,
             WorkerEntryPoint::class.java,
         )
-        entryPoint.transferSyncRunner().runOnce()
+        val report = entryPoint.transferSyncRunner().runOnce()
+        if (report.newTransfers > 0) {
+            // Only what this pass actually brought in. A count of zero covers both
+            // "nothing arrived" and "the pull failed", and neither is worth a
+            // notification - the first is not news and the second would be wrong.
+            entryPoint.transferNotifier().notifyIncoming(report.newTransfers)
+        }
         Result.success()
     }
 }

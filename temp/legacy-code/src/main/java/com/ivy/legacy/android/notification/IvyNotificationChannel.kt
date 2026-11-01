@@ -42,6 +42,23 @@ enum class IvyNotificationChannel(
         description = "Reminding you that a monthly bill is due.",
         importance = NotificationManager.IMPORTANCE_HIGH,
         bypassDnd = false
+    ),
+
+    /**
+     * Someone sent money and it is waiting on a confirmation.
+     *
+     * Its own channel for the reason BILL_REMINDER has one: this is neither a nag
+     * nor a bill, and silencing one must not silence the other. High importance
+     * because it is time-sensitive - the sender is watching their own ledger stay
+     * wrong until it is answered - but not MAX and no DND bypass: money waiting
+     * overnight can wait until morning.
+     */
+    TRANSFER_INCOMING(
+        channelId = "transfer_incoming",
+        channelName = "Incoming transfer",
+        description = "Telling you that a transfer is waiting for your confirmation.",
+        importance = NotificationManager.IMPORTANCE_HIGH,
+        bypassDnd = false
     );
 
     @SuppressLint("WrongConstant")

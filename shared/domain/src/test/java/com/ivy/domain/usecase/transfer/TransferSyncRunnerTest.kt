@@ -30,7 +30,7 @@ class TransferSyncRunnerTest {
     fun `unconfigured device skips all network steps`() = runTest {
         every { config.isConfigured } returns false
 
-        runner().runOnce() shouldBe false
+        runner().runOnce().ran shouldBe false
 
         coVerify(exactly = 0) { directorySync.publishLocalAccounts() }
         coVerify(exactly = 0) { directorySync.refresh() }
@@ -44,7 +44,7 @@ class TransferSyncRunnerTest {
         every { config.isConfigured } returns true
         coEvery { directorySync.refresh() } throws RuntimeException("flaky network")
 
-        runner().runOnce() shouldBe true
+        runner().runOnce().ran shouldBe true
 
         coVerifyOrder {
             directorySync.publishLocalAccounts()
@@ -53,5 +53,43 @@ class TransferSyncRunnerTest {
             eventSync.pullEvents()
             eventSync.pullConfirmations()
         }
+    }
+
+    @Test
+    fun `a pass reports how many transfers and answers actually arrived`() = runTest {
+        // The counts are the whole reason this returns a report instead of a
+        // Boolean: a caller cannot decide whether to notify anyone without them.
+        every { config.isConfigured } returns true
+        coEvery { eventSync.pullEvents() } returns
+            TransferEventSync.PullResult.Pulled(newItems = 3, alreadyKnown = 1, undeliverable = 0)
+        coEvery { eventSync.pullConfirmations() } returns
+            TransferConfirmationRepository.AnswerPullResult.Pulled(
+                recorded = 2,
+                alreadyKnown = 0,
+                notOurs = 1,
+                unusable = 0,
+            )
+
+        val report = runner().runOnce()
+
+        report.ran shouldBe true
+        report.newTransfers shouldBe 3
+        report.newAnswers shouldBe 2
+    }
+
+    @Test
+    fun `a failed pull reports nothing arrived rather than a wrong count`() = runTest {
+        // A notification saying "a transfer is waiting" about a pass that never
+        // read the server would be a lie the owner cannot check.
+        every { config.isConfigured } returns true
+        coEvery { eventSync.pullEvents() } throws RuntimeException("socket closed")
+        coEvery { eventSync.pullConfirmations() } returns
+            TransferConfirmationRepository.AnswerPullResult.Unreachable
+
+        val report = runner().runOnce()
+
+        report.ran shouldBe true
+        report.newTransfers shouldBe 0
+        report.newAnswers shouldBe 0
     }
 }
