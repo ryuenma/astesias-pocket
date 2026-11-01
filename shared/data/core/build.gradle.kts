@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "com.ivy.data"
+
+    testOptions {
+        // Robolectric needs the merged resources and manifest to build an
+        // Application, and Room's in-memory builder needs a real Context.
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -21,5 +27,11 @@ dependencies {
     implementation(libs.bundles.ktor)
 
     testImplementation(projects.shared.data.modelTesting)
+    // An in-memory Room database in a JVM test. Without it the atomicity of
+    // TransferDecisionWriter could only be argued from code reading: the rollback
+    // it relies on is Room's, and a mock cannot be rolled back.
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.room.testing)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.bundles.integration.testing)
 }

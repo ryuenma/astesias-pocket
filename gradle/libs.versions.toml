@@ -13,6 +13,8 @@ room = "2.6.1"
 androidx-work = "2.9.1"
 kotlinx-collections = "0.3.7"
 paparazzi = "1.3.3"
+# Robolectric 4.14 is the first line that instruments SDK 35; we pin SDK 33 in tests anyway
+robolectric = "4.14.1"
 
 # Android
 min-sdk = "28"
@@ -94,6 +96,7 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 datastore = { module = "androidx.datastore:datastore-preferences", version = "1.1.1" }
 
