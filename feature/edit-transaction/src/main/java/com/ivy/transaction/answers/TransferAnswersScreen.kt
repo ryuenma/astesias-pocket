@@ -77,14 +77,21 @@ class TransferAnswersViewModel @Inject constructor(
 
             val loaded = runCatching {
                 repository.answered().toImmutableList()
-            }.getOrElse { error ->
+            }.onFailure { error ->
                 Timber.e(error, "Could not load recorded transfer answers")
-                items.value
+            }.getOrNull()
+
+            if (loaded == null) {
+                // The read failed, so this screen is still showing what it had.
+                // Acknowledging now would clear the badge for answers nobody saw.
+                return@launch
             }
+
             items.value = loaded
 
-            // Only once the rows are on screen. See the function doc.
-            runCatching { repository.acknowledgeAll() }
+            // Only the rows on screen, and only once they are: an answer with no
+            // retained event is not in this list and keeps its badge.
+            runCatching { repository.acknowledgeShown(loaded.map { it.correlationId }) }
                 .onFailure { Timber.e(it, "Could not acknowledge transfer answers") }
         }
     }

@@ -177,13 +177,18 @@ class TransferConfirmationRepository @Inject constructor(
     suspend fun unacknowledgedCount(): Int = dao.countUnacknowledged()
 
     /**
-     * Marks every recorded answer as read.
+     * Marks the answers that actually reached the screen as read.
+     *
+     * Takes the ids the caller rendered, rather than clearing every unread row:
+     * an answer with no retained event cannot be listed, so acknowledging it would
+     * spend a badge on something nobody was shown.
      *
      * Called when she opens the list: having opened it, she has seen it. Not a
      * deletion - the answers stay readable, because "what happened to the money
      * I sent" is a question she can ask again next month.
      */
-    suspend fun acknowledgeAll(): Int = writer.acknowledgeAll()
+    suspend fun acknowledgeShown(correlationIds: List<UUID>): Int =
+        if (correlationIds.isEmpty()) 0 else writer.acknowledgeMany(correlationIds)
 
     private fun now(): Long = System.currentTimeMillis()
 

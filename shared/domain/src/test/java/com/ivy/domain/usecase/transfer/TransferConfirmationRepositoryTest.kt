@@ -317,7 +317,7 @@ class TransferConfirmationRepositoryTest {
         repo().pullAnswers() shouldBe TransferConfirmationRepository.AnswerPullResult.Unreachable
 
         coVerify(exactly = 0) { writer.recordIfAbsent(any()) }
-        coVerify(exactly = 0) { writer.acknowledgeAll() }
+        coVerify(exactly = 0) { writer.acknowledgeMany(any()) }
     }
 
     @Test
@@ -406,17 +406,30 @@ class TransferConfirmationRepositoryTest {
     }
 
     @Test
-    fun `acknowledging marks every answer read but DELETES nothing`() = runTest {
+    fun `acknowledging marks the rendered answers read but DELETES nothing`() = runTest {
         // The answers are a record of what happened to her money, and "what did
         // she say about the transfer I sent on the 5th" is a question she can ask
         // again next month. Opening the list marks them read; it does not erase
         // them.
-        coEvery { writer.acknowledgeAll() } returns 3
+        val first = UUID.fromString("11111111-1111-4111-8111-111111111111")
+        val second = UUID.fromString("22222222-2222-4222-8222-222222222222")
+        coEvery { writer.acknowledgeMany(any()) } returns 2
 
-        repo().acknowledgeAll() shouldBe 3
+        repo().acknowledgeShown(listOf(first, second)) shouldBe 2
 
-        coVerify(exactly = 1) { writer.acknowledgeAll() }
+        // Exactly the rows that reached the screen - not every unread row, which
+        // would spend badges on answers the list cannot describe.
+        coVerify(exactly = 1) { writer.acknowledgeMany(listOf(first, second)) }
         coVerify(exactly = 0) { writer.deleteAll() }
+    }
+
+    @Test
+    fun `acknowledging an empty list does not touch the database`() = runTest {
+        // An empty list means nothing was rendered; querying anyway would say the
+        // opposite of what the caller means.
+        repo().acknowledgeShown(emptyList()) shouldBe 0
+
+        coVerify(exactly = 0) { writer.acknowledgeMany(any()) }
     }
 
     @Test

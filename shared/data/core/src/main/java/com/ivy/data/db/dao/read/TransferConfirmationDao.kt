@@ -75,8 +75,17 @@ interface TransferConfirmationDao {
      * How many answers the owner has not read yet. Drives the Settings badge.
      *
      * Counted, not merely checked, so the row can say how many. A count that
-     * disagrees with the list would be worse than no badge at all.
+     * disagrees with the list would be worse than no badge at all - which is what
+     * this was: the list joins the retained outbox event and filters on
+     * `kind = 'TRANSFER_EVENT'`, while this counted every unread row, so an answer
+     * this device cannot describe inflated the badge and then never appeared when
+     * the screen was opened. The join and the filter here now mirror
+     * [findAllWithEvent] exactly; change one and you must change the other.
      */
-    @Query("SELECT COUNT(*) FROM transfer_confirmations WHERE acknowledged = 0")
+    @Query(
+        "SELECT COUNT(*) FROM transfer_confirmations c " +
+            "INNER JOIN transfer_outbox e ON e.correlationId = c.correlationId " +
+            "WHERE c.acknowledged = 0 AND e.kind = 'TRANSFER_EVENT'"
+    )
     suspend fun countUnacknowledged(): Int
 }

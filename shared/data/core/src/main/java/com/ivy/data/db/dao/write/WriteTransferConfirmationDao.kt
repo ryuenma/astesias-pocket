@@ -53,14 +53,24 @@ interface WriteTransferConfirmationDao {
     suspend fun acknowledge(correlationId: UUID): Int
 
     /**
-     * Marks every recorded answer as read.
+     * Marks the answers the screen actually rendered as read.
      *
-     * Used when the owner opens the list: having opened it, she has seen it. Not
-     * a deletion - the answers are a record of what happened to her money and
+     * Takes the ids rather than clearing the table: [com.ivy.data.db.dao.read.TransferConfirmationDao.findAllWithEvent]
+     * drops answers with no retained outbox event, and those are never shown. An
+     * unfiltered `WHERE acknowledged = 0` consumed their badge as well, so the
+     * count cleared for something the owner was never told about - and if the read
+     * had failed, for the entire list.
+     *
+     * Not a deletion - the answers are a record of what happened to her money and
      * stay readable for as long as the row survives.
+     *
+     * @return rows changed, so a caller can log how much was really acknowledged.
      */
-    @Query("UPDATE transfer_confirmations SET acknowledged = 1 WHERE acknowledged = 0")
-    suspend fun acknowledgeAll(): Int
+    @Query(
+        "UPDATE transfer_confirmations SET acknowledged = 1 " +
+            "WHERE correlationId IN (:correlationIds) AND acknowledged = 0"
+    )
+    suspend fun acknowledgeMany(correlationIds: List<UUID>): Int
 
     /** Removes every row when the owner wipes all local data. */
     @Query("DELETE FROM transfer_confirmations")
