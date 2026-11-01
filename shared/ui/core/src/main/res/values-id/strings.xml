@@ -475,7 +475,7 @@
     <string name="sync_token_expired_modal">Masuk sebagai %1$s, tetapi koneksi ini kedaluwarsa dan tidak dapat diperbarui sendiri. Masukkan kata sandi untuk menyambungkan kembali.</string>
     <string name="sync_disconnect">Putuskan</string>
 
-    <string name="sync_err_no_account">Server menjawab tetapi menolak detail masuk ini. Jika akun ini belum pernah dihubungkan, akun harus dibuat lebih dulu di server.</string>
+    <string name="sync_err_no_account">Server menolak detail masuk ini. Periksa kata sandinya; kalau profil ini baru, admin harus membuatnya dulu di server.</string>
     <string name="sync_err_unreachable">Tidak dapat menghubungi server. Periksa alamat dan koneksi Anda.</string>
     <string name="sync_err_server">Server menjawab dengan hal yang tidak terduga. Coba lagi sebentar lagi.</string>
     <string name="export_xlsx">Ekspor sebagai spreadsheet (.xlsx)</string>

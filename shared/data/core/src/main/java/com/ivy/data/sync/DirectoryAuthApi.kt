@@ -118,9 +118,11 @@ object DirectoryAuthApi {
             if (response.status != HttpStatusCode.OK) {
                 Timber.w("Sync sign-in refused: HTTP ${response.status}")
                 return Result(
-                    // 400 from PocketBase means the identity/password pair did not
-                    // match. That is the signature of "profile was never seeded",
-                    // which is the single most likely cause here.
+                    // 400 from PocketBase means the pair did not match - and that is ALL
+                    // it means. Measured against the live server: a nonexistent identity and a
+                    // wrong password both answer {"status":400,"message":"Failed to authenticate."},
+                    // byte for byte. So this cannot tell "wrong password" from "profile never
+                    // created", and the copy shown to the owner must not claim that it can.
                     outcome = if (response.status == HttpStatusCode.BadRequest) {
                         Outcome.BAD_CREDENTIALS
                     } else {
