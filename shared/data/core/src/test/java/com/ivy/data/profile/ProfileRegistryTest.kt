@@ -23,6 +23,7 @@ class ProfileRegistryTest {
     private lateinit var files: MutableSet<String>
     private lateinit var fileSystem: FileSystem
     private lateinit var registry: ProfileRegistry
+    private lateinit var syncWrites: MutableList<String>
 
     @Before
     fun setUp() {
@@ -42,6 +43,11 @@ class ProfileRegistryTest {
             values[firstArg<String>()] as? String ?: secondArg<String?>()
         }
         every { prefs.putString(any(), any()) } answers {
+            values[firstArg()] = secondArg()
+        }
+        syncWrites = mutableListOf()
+        every { prefs.putStringSync(any(), any()) } answers {
+            syncWrites.add(firstArg())
             values[firstArg()] = secondArg()
         }
 
@@ -74,6 +80,20 @@ class ProfileRegistryTest {
 
         registry.activeProfileId() shouldBe ProfileId.of("so")
         registry.activeProfile().id shouldBe ProfileId.of("so")
+    }
+
+    @Test
+    fun `setting the active profile writes synchronously, because the process dies next`() {
+        registry.register(Profile(ProfileId.of("so"), "Her"))
+
+        registry.setActiveProfile(ProfileId.of("so"))
+
+        // ProfileSwitcher calls exitProcess immediately after this returns, and an
+        // async apply() can be discarded with the process - the app then relaunches
+        // on the OLD profile with no error. The write has to be on disk before the
+        // restart, not scheduled after it.
+        syncWrites shouldContainExactly listOf(KEY_ACTIVE_PROFILE)
+        registry.activeProfileId() shouldBe ProfileId.of("so")
     }
 
     @Test

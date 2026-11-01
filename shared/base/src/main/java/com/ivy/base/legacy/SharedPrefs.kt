@@ -93,6 +93,20 @@ class SharedPrefs @Inject constructor(
         editor.apply()
     }
 
+    /**
+     * Writes and BLOCKS until the value is on disk.
+     *
+     * [putString] uses `apply()`, which is right for a preference some later frame can
+     * re-read, and wrong for the single write that has to survive the process being
+     * killed in the very next statement. `ProfileSwitcher` sets the active profile and
+     * then calls `exitProcess`; an in-flight `apply()` can be discarded with it, and the
+     * app relaunches on the old profile with no error anywhere.
+     */
+    @Suppress("ApplySharedPref")
+    fun putStringSync(key: String, value: String?) {
+        preferences.edit().putString(key, value).commit()
+    }
+
     fun putBoolean(key: String, value: Boolean) {
         val editor = preferences.edit()
         editor.putBoolean(key, value)

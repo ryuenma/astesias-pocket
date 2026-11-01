@@ -128,7 +128,9 @@ class ProfileRegistry @Inject constructor(
         check(profiles().any { it.id == id }) {
             "cannot activate unregistered profile '${id.value}'; call register first"
         }
-        sharedPrefs.putString(KEY_ACTIVE_PROFILE, id.value)
+        // Synchronous on purpose: ProfileSwitcher restarts the process immediately
+        // after this returns, and an async apply() can be lost with it.
+        sharedPrefs.putStringSync(KEY_ACTIVE_PROFILE, id.value)
     }
 
     private fun persist(profiles: List<Profile>) {
