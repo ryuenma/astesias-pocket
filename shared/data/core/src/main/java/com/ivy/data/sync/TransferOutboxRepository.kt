@@ -43,6 +43,7 @@ class TransferOutboxRepository @Inject constructor(
         fromAccountName: String?,
         toAccountName: String?,
         enqueuedAt: Long,
+        toAccountId: UUID? = null,
     ): Boolean {
         val row = TransferOutboxEntity(
             correlationId = correlationId,
@@ -53,6 +54,7 @@ class TransferOutboxRepository @Inject constructor(
             occurredOn = occurredOn,
             fromAccountName = fromAccountName,
             toAccountName = toAccountName,
+            toAccountId = toAccountId,
             state = TransferOutboxEntity.STATE_PENDING,
             enqueuedAt = enqueuedAt,
         )
@@ -240,6 +242,10 @@ class TransferOutboxRepository @Inject constructor(
                 occurredOn = row.occurredOn.orEmpty(),
                 fromAccountName = row.fromAccountName,
                 toAccountName = row.toAccountName,
+                // Republished byte-for-byte what was enqueued, like every other
+                // field on this row: the id the receiver resolves is the one the
+                // sender picked, not a re-derivation of it.
+                toAccountId = row.toAccountId?.toString(),
             )
 
             TransferOutboxEntity.KIND_CONFIRMATION -> api.publishConfirmation(

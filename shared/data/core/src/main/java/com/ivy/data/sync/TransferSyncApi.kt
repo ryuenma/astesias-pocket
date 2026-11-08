@@ -46,10 +46,20 @@ class TransferSyncApi @Inject constructor(
     /**
      * A transfer event as stored on the server.
      *
-     * Field names and types mirror `1700000000_collections.js` exactly. Note
-     * what is NOT here: no account ids on either side. The two legs live in two
-     * databases and share no account id, so the wire carries names, and
-     * `correlationId` is the only thing the two records agree on.
+     * Field names and types mirror `1700000000_collections.js` exactly, with one
+     * addition over the original collection: `toAccountId` is optional, and the
+     * server's `transfer_events` collection must carry the same optional text
+     * field or a POST that includes it is refused (an HTTP 400 that would land
+     * in the outbox row's `lastError` and retry forever - see
+     * `publishEvent`).
+     *
+     * The two legs live in two databases, so the receiver's account is still not
+     * resolvable by id on the far side the way a foreign key would be: the id
+     * names a row in the shared directory (`directory_accounts`), and the
+     * receiver resolves it through that directory - see `TransferEventSync`.
+     * Historical data identities by name alone; `toAccountId` is the
+     * placement key now, and `toAccountName` is the legacy fallback. Either
+     * way, `correlationId` is the only thing the two records MUST agree on.
      */
     @Serializable
     // Defaults are the point: a server that adds a field must not stop
@@ -65,6 +75,7 @@ class TransferSyncApi @Inject constructor(
         @SerialName("occurredOn") val occurredOn: String = "",
         @SerialName("fromAccountName") val fromAccountName: String? = null,
         @SerialName("toAccountName") val toAccountName: String? = null,
+        @SerialName("toAccountId") val toAccountId: String? = null,
     )
 
     /** An answer to a transfer, as stored on the server. */
@@ -148,6 +159,7 @@ class TransferSyncApi @Inject constructor(
         occurredOn: String,
         fromAccountName: String?,
         toAccountName: String?,
+        toAccountId: String? = null,
     ): PublishResult {
         val body = buildString {
             append("""{"correlationId":"${correlationId.escape()}"""")
@@ -157,6 +169,7 @@ class TransferSyncApi @Inject constructor(
             append(""","occurredOn":"${occurredOn.escape()}"""")
             appendNullable("fromAccountName", fromAccountName)
             appendNullable("toAccountName", toAccountName)
+            appendNullable("toAccountId", toAccountId)
             append("}")
         }
         return post("/api/collections/transfer_events/records", body, "event $correlationId")

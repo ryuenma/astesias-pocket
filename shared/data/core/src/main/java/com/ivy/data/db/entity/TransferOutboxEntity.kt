@@ -102,14 +102,32 @@ data class TransferOutboxEntity(
     val fromAccountName: String? = null,
 
     /**
-     * Name of the account the money arrived into, on the counterpart's device.
+     * Name of the account the money arrived into, as the SENDER knows it.
      *
-     * A name and not an id, and this is forced rather than chosen: the two legs
-     * live in two separate databases and share no account id, so an id here
-     * would be an unresolvable foreign key on the far side. This is the same
-     * reasoning as the server's `toAccountName` field.
+     * Kept for backward compatibility with rows recorded before
+     * [toAccountId] existed, and as the fallback when a legacy event carries
+     * no id. The name the receiver resolves against is her own, so a sender's
+     * spelling that drifted from the receiver's actual account name is exactly
+     * the failure mode this field alone cannot escape - see [toAccountId].
      */
     val toAccountName: String? = null,
+
+    /**
+     * The destination account's id as published in the shared directory.
+     *
+     * A UUID, not a directory foreign key: it is the `accountId` of the
+     * directory row the sender picked for the destination, and the receiver
+     * resolves it through her own copy of that directory - see
+     * `DirectoryAccountEntity`, whose `accountId` is the account owner's own
+     * local Room id. Carrying the id on the wire is what lets a transfer be
+     * placed even when the two devices spell the account differently, which
+     * the name alone could never guarantee.
+     *
+     * Null only for rows recorded before this field existed; those are
+     * published without it on the wire and matched by name on the way in.
+     * Never set for a [KIND_CONFIRMATION] row, which carries no account.
+     */
+    val toAccountId: UUID? = null,
 
     /** ACCEPTED or DECLINED, for a confirmation only. An enum on the wire. */
     val decision: String? = null,

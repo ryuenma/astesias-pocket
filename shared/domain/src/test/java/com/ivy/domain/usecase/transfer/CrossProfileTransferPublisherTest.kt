@@ -41,7 +41,7 @@ class CrossProfileTransferPublisherTest {
     @Test
     fun `the queued row names the transfer exactly as it was recorded`() = runTest {
         coEvery { config.profileId } returns "owner"
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             true
         coEvery { outbox.drain(any()) } returns
             TransferOutboxRepository.DrainResult(1, 0, 0)
@@ -72,7 +72,7 @@ class CrossProfileTransferPublisherTest {
     @Test
     fun `the date is the UTC calendar day so both phones agree on it`() = runTest {
         coEvery { config.profileId } returns "owner"
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             true
         coEvery { outbox.drain(any()) } returns
             TransferOutboxRepository.DrainResult(1, 0, 0)
@@ -104,13 +104,13 @@ class CrossProfileTransferPublisherTest {
         // when she does, not have been silently dropped - the ledger says it
         // happened, so the transport owes the server a copy.
         coEvery { config.isConfigured } returns false
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             true
 
         publish()
 
         coVerify(exactly = 1) {
-            outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any())
+            outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
         // And makes no network attempt at all.
         coVerify(exactly = 0) { outbox.drain(any()) }
@@ -119,7 +119,7 @@ class CrossProfileTransferPublisherTest {
     @Test
     fun `an unconfigured device never blocks on the network`() = runTest {
         coEvery { config.isConfigured } returns false
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             true
 
         val result = publish()
@@ -136,7 +136,7 @@ class CrossProfileTransferPublisherTest {
         // nothing here failed: the ledger row was written before this ran.
         coEvery { config.isConfigured } returns true
         coEvery { config.profileId } returns "owner"
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             true
         coEvery { outbox.drain(any()) } returns
             TransferOutboxRepository.DrainResult(published = 0, alreadyThere = 0, deferred = 1)
@@ -154,7 +154,7 @@ class CrossProfileTransferPublisherTest {
         coEvery { config.isConfigured } returns true
         coEvery { config.profileId } returns "owner"
         // 0 = the primary key refused it, i.e. already queued.
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             false
         coEvery { outbox.drain(any()) } returns
             TransferOutboxRepository.DrainResult(1, 0, 0)
@@ -172,7 +172,7 @@ class CrossProfileTransferPublisherTest {
         // fallback is used instead - unique, so it can never be confused with
         // another profile's event.
         coEvery { config.profileId } returns null
-        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { outbox.enqueueEvent(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
             true
 
         publisher().publishRecorded(

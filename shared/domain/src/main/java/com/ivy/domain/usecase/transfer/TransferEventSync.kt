@@ -1,6 +1,8 @@
 package com.ivy.domain.usecase.transfer
 
 import com.ivy.data.db.dao.read.AccountDao
+import com.ivy.data.db.dao.read.DirectoryAccountDao
+import com.ivy.data.db.entity.AccountEntity
 import com.ivy.data.db.entity.PendingTransferEntity
 import com.ivy.data.sync.DirectorySyncApi
 import com.ivy.data.sync.SyncConfig
@@ -47,6 +49,7 @@ class TransferEventSync @Inject constructor(
     private val pendingTransfers: PendingTransferRepository,
     private val answers: TransferConfirmationRepository,
     private val accounts: AccountDao,
+    private val directoryAccounts: DirectoryAccountDao,
     private val config: SyncConfig,
 ) {
 
@@ -199,18 +202,38 @@ class TransferEventSync @Inject constructor(
             return Delivery.Skipped("own event")
         }
 
-        // The destination must be one of HER accounts. `toAccountName` is the
-        // sender's name for it, and his database is the only place that name
-        // exists - so it is matched against her own accounts here. No match
-        // means the event stays on the server, and offering it anyway would let
-        // her accept money into an account the event never named.
-        val destination = event.toAccountName?.takeIf { it.isNotBlank() }
-            ?: return Delivery.Undeliverable("no destination account name")
-        val intoAccount = accounts.findByName(destination)
+        // The destination must be one of HER accounts. It is resolved by ID
+        // first and by name second, because the two spellings of "the account
+        // the money went to" are not equally trustworthy:
+        //
+        // - `toAccountId` is the directory row the sender picked, and the
+        //   directory is the one thing both devices agree on. It is looked up
+        //   under HER profile id, because a `DirectoryAccountEntity`'s id is
+        //   only unique within one profile, and the destination belongs to her
+        //   - then the directory row's name is matched against her live local
+        //   accounts. This is what still places the transfer when the sender's
+        //   view of the name has drifted from what she actually calls it.
+        // - `toAccountName` alone is the LEGACY path: rows recorded before ids
+        //   were carried name the account the sender's way, and receive the
+        //   old exact-name match.
+        //
+        // No resolution at all means the event stays on the server, and
+        // offering it anyway would let her accept money into an account the
+        // event never named.
+        val toAccountId = event.toAccountId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+        if (toAccountId == null && event.toAccountName.isNullOrBlank()) {
+            return Delivery.Undeliverable("no destination account name")
+        }
+        val intoAccount = destinationByDirectoryId(toAccountId)
+            ?: legacyDestinationByName(event.toAccountName)
         if (intoAccount == null) {
             Timber.w(
-                "Cannot place transfer $correlationId: no local account named " +
-                    "'$destination'. It stays on the server."
+                "Cannot place transfer $correlationId: no local account matches " +
+                    (toAccountId?.let { "directory account id '$it'" }
+                        ?: "the name '${event.toAccountName}'") +
+                    ". It stays on the server."
             )
             return Delivery.Undeliverable("no destination account")
         }
@@ -239,6 +262,50 @@ class TransferEventSync @Inject constructor(
                 state = PendingTransferState.PENDING.name,
             )
         )
+    }
+
+    /**
+     * Her live account behind a directory account id, or null.
+     *
+     * `toAccountId` names a row in `directory_accounts`, and that row is looked
+     * up under HER profile id: an account id is only unique within one profile
+     * (two devices can legitimately publish the same id), and the destination
+     * of a transfer TO her is an account SHE published. The row is not the
+     * answer by itself - it is her directory's copy of the account - so the
+     * row's name is what gets matched against her live `accounts` table, which
+     * is the ledger where the money will actually arrive.
+     *
+     * Null on every failure - unparseable id, a directory row missing or stale
+     * beyond repair, a name that matches nothing live - and the caller falls
+     * back to the legacy name match, so a partially refreshed directory never
+     * costs the transfer itself.
+     */
+    private suspend fun destinationByDirectoryId(
+        toAccountId: UUID?,
+    ): AccountEntity? {
+        if (toAccountId == null) return null
+        val directoryRow = directoryAccounts.findByAccountId(
+            profileId = config.profileId.orEmpty(),
+            accountId = toAccountId.toString(),
+        ) ?: return null
+        val publishedName = directoryRow.name.takeIf { it.isNotBlank() } ?: return null
+        return accounts.findByName(publishedName)
+    }
+
+    /**
+     * Pre-id compatibility: match the wire's `toAccountName` directly, exactly
+     * as delivery always worked before ids existed.
+     *
+     * Exact match rather than a fuzzy or case-insensitive one, on purpose - see
+     * `AccountDao.findByName` for why picking between two accounts called
+     * "Cash" is a coin-flip about someone's savings. Null when the name is
+     * blank or matches nothing, which the caller reports as undeliverable.
+     */
+    private suspend fun legacyDestinationByName(
+        toAccountName: String?,
+    ): AccountEntity? {
+        val name = toAccountName?.takeIf { it.isNotBlank() } ?: return null
+        return accounts.findByName(name)
     }
 
     /**

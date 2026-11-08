@@ -1,9 +1,11 @@
 package com.ivy.domain.usecase.transfer
 
 import com.ivy.data.db.dao.read.AccountDao
+import com.ivy.data.db.dao.read.DirectoryAccountDao
 import com.ivy.data.db.dao.read.PendingTransferDao
 import com.ivy.data.db.transfer.TransferDecisionWriter
 import com.ivy.data.db.entity.AccountEntity
+import com.ivy.data.db.entity.DirectoryAccountEntity
 import com.ivy.data.sync.DirectorySyncApi
 import com.ivy.data.sync.SyncConfig
 import com.ivy.data.sync.TransferOutboxRepository
@@ -35,6 +37,7 @@ class TransferEventSyncTest {
     private val pendingDao: PendingTransferDao = mockk(relaxed = true)
     private val decisionWriter: TransferDecisionWriter = mockk(relaxed = true)
     private val accounts: AccountDao = mockk()
+    private val directoryAccounts: DirectoryAccountDao = mockk()
     private val config: SyncConfig = mockk(relaxed = true)
 
     private val herAccount = UUID.fromString("22222222-2222-4222-8222-222222222222")
@@ -51,6 +54,7 @@ class TransferEventSyncTest {
         pendingTransfers = pendingTransfers,
         answers = answers,
         accounts = accounts,
+        directoryAccounts = directoryAccounts,
         config = config,
     )
 
@@ -58,6 +62,7 @@ class TransferEventSyncTest {
         correlationId: String = this.correlationId.toString(),
         recordedBy: String = "so",
         toAccountName: String? = "Mandiri",
+        toAccountId: String? = null,
         fromAccountName: String? = "BCA",
         occurredOn: String = "2026-10-05",
         amount: Double = 500_000.0,
@@ -69,6 +74,7 @@ class TransferEventSyncTest {
         occurredOn = occurredOn,
         fromAccountName = fromAccountName,
         toAccountName = toAccountName,
+        toAccountId = toAccountId,
     )
 
     private fun herAccountEntity(name: String = "Mandiri") = AccountEntity(
@@ -116,6 +122,137 @@ class TransferEventSyncTest {
             it.amount shouldBe 500_000.0
             it.currency shouldBe "IDR"
         }
+    }
+
+    @Test
+    fun `an event addressed to her directory account id is placed by id, not name`() = runTest {
+        // THE reason the wire carries an id at all. `toAccountName` is the
+        // sender's spelling, and it has drifted from what her local account is
+        // actually called; the id names a row in the shared directory, both
+        // phones agree on it, and the transfer is still placed - which is the
+        // case the name-only match shipped in this file could not handle.
+        stubConfigured()
+        coEvery { api.fetchEvents() } returns TransferSyncApi.PbList(
+            listOf(event(toAccountName = "Stale spelling", toAccountId = herAccount.toString())),
+            1,
+        )
+        // Her OWN profile published the destination row, so the directory
+        // lookup is keyed on her profile id with the id the sender carried.
+        coEvery {
+            directoryAccounts.findByAccountId("owner", herAccount.toString())
+        } returns DirectoryAccountEntity(
+            profileId = "owner",
+            accountId = herAccount,
+            profileName = "me",
+            name = "Mandiri",
+        )
+        coEvery { accounts.findByName("Mandiri") } returns herAccountEntity()
+        coEvery { pendingDao.findState(any()) } returns null
+
+        val result = sync().pullEvents()
+
+        result shouldBe TransferEventSync.PullResult.Pulled(
+            newItems = 1,
+            alreadyKnown = 0,
+            undeliverable = 0,
+        )
+        // `findByName` was only ever called with the DIRECTORY's name. The
+        // sender's stale spelling must never be what the match runs against -
+        // which is what makes the drift survivable.
+        coVerify(exactly = 1) { accounts.findByName("Mandiri") }
+        coVerify(exactly = 1) { accounts.findByName(any()) }
+    }
+
+    @Test
+    fun `a null id on the wire still places the transfer the legacy way`() = runTest {
+        // Rows recorded before ids existed carry only a name. Neither the
+        // outbox nor the server is rewritten on upgrade, so the old match has
+        // to keep working rather than being replaced by the new key.
+        stubConfigured()
+        coEvery { api.fetchEvents() } returns TransferSyncApi.PbList(listOf(event()), 1)
+        coEvery { accounts.findByName("Mandiri") } returns herAccountEntity()
+        coEvery { pendingDao.findState(any()) } returns null
+
+        val result = sync().pullEvents()
+
+        result shouldBe TransferEventSync.PullResult.Pulled(
+            newItems = 1,
+            alreadyKnown = 0,
+            undeliverable = 0,
+        )
+        // And nothing ever reached for the directory, because there was
+        // nothing to resolve an id against.
+        coVerify(exactly = 0) { directoryAccounts.findByAccountId(any(), any()) }
+    }
+
+    @Test
+    fun `an unparseable toAccountId falls back to the name`() = runTest {
+        // A malformed id is a corrupted row, not a permission to guess. It is
+        // treated exactly as absent - the name carries on the transfer, the way
+        // legacy events were always placed.
+        stubConfigured()
+        coEvery { api.fetchEvents() } returns TransferSyncApi.PbList(
+            listOf(event(toAccountId = "not-a-uuid")),
+            1,
+        )
+        coEvery { accounts.findByName("Mandiri") } returns herAccountEntity()
+        coEvery { pendingDao.findState(any()) } returns null
+
+        val result = sync().pullEvents()
+
+        result shouldBe TransferEventSync.PullResult.Pulled(
+            newItems = 1,
+            alreadyKnown = 0,
+            undeliverable = 0,
+        )
+        coVerify(exactly = 0) { directoryAccounts.findByAccountId(any(), any()) }
+    }
+
+    @Test
+    fun `an id with no directory row and no name is undeliverable`() = runTest {
+        // An id that resolves to nothing anywhere cannot be placed, and
+        // inventing a destination "because there is only one account" is the
+        // failure this whole file refuses. The event stays on the server.
+        stubConfigured()
+        coEvery { api.fetchEvents() } returns TransferSyncApi.PbList(
+            listOf(event(toAccountName = null, toAccountId = herAccount.toString())),
+            1,
+        )
+        coEvery { pendingDao.findState(any()) } returns null
+
+        val result = sync().pullEvents()
+
+        result shouldBe TransferEventSync.PullResult.Pulled(
+            newItems = 0,
+            alreadyKnown = 0,
+            undeliverable = 1,
+        )
+        coVerify(exactly = 0) { pendingDao.insertIfAbsent(any()) }
+    }
+
+    @Test
+    fun `a directory row whose id is missing falls back to the wire name`() = runTest {
+        // A stale or truncated directory cache must not lose the transfer: if
+        // the id resolves to no row, the old name match gets its turn.
+        stubConfigured()
+        coEvery { api.fetchEvents() } returns TransferSyncApi.PbList(
+            listOf(event(toAccountId = herAccount.toString())),
+            1,
+        )
+        coEvery { accounts.findByName("Mandiri") } returns herAccountEntity()
+        coEvery { pendingDao.findState(any()) } returns null
+
+        // `findByAccountId` returns null without a stub: her directory cache
+        // genuinely has no row for this id, which is an ordinary stale-cache
+        // state, not an error - so the name match gets its turn.
+        coEvery { directoryAccounts.findByAccountId(any(), any()) } returns null
+        val result = sync().pullEvents()
+
+        result shouldBe TransferEventSync.PullResult.Pulled(
+            newItems = 1,
+            alreadyKnown = 0,
+            undeliverable = 0,
+        )
     }
 
     @Test

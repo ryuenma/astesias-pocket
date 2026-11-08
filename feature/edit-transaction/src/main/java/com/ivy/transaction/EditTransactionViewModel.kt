@@ -896,6 +896,12 @@ class EditTransactionViewModel @Inject constructor(
                             amount = leg.amount,
                             currency = fromCurrency,
                             occurredOn = leg.dateTime ?: timeProvider.utcNow(),
+                            // Carry the destination's directory id, not just its
+                            // name: the directory is the one thing both devices
+                            // agree on, so the receiver can place the transfer
+                            // by id even when the two spellings of the account
+                            // name have drifted apart.
+                            destinationAccountId = directoryDest.accountId,
                         )
                     }
                 } else {
@@ -1002,6 +1008,9 @@ class EditTransactionViewModel @Inject constructor(
             amount = transfer.fromValue.amount.value,
             currency = fromCurrency,
             occurredOn = transfer.time,
+            // Same reason as the leg write above: the directory id, not the
+            // name, is what the other phone can resolve.
+            destinationAccountId = destination.accountId,
         )
     }
 

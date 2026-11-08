@@ -35,6 +35,7 @@ class TransferOutboxRepositoryTest {
         kind: String = TransferOutboxEntity.KIND_EVENT,
         amount: Double? = 500_000.0,
         decision: String? = null,
+        toAccountId: UUID? = null,
     ) = TransferOutboxEntity(
         correlationId = id,
         kind = kind,
@@ -44,6 +45,7 @@ class TransferOutboxRepositoryTest {
         occurredOn = "2026-10-05",
         fromAccountName = "BCA",
         toAccountName = "Mandiri",
+        toAccountId = toAccountId,
         decision = decision,
         state = TransferOutboxEntity.STATE_PENDING,
         enqueuedAt = 1_757_030_400_000L,
@@ -72,7 +74,7 @@ class TransferOutboxRepositoryTest {
             enqueuedAt = 1_757_030_400_000L,
         ) shouldBe true
 
-        coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { api.publishConfirmation(any(), any(), any()) }
     }
 
@@ -205,7 +207,7 @@ class TransferOutboxRepositoryTest {
     @Test
     fun `an accepted publish marks the row sent`() = runTest {
         coEvery { dao.findPending(any()) } returns listOf(queuedRow())
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.Accepted
         coEvery { writer.markSent(any(), any(), any(), any()) } returns 1
 
@@ -223,7 +225,7 @@ class TransferOutboxRepositoryTest {
         // means the other phone already has it. Clearing the row is what stops
         // this device re-sending it on every sync forever.
         coEvery { dao.findPending(any()) } returns listOf(queuedRow())
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.AlreadyPublished
         coEvery { writer.markSent(any(), any(), any(), any()) } returns 1
 
@@ -246,7 +248,7 @@ class TransferOutboxRepositoryTest {
         // A phone in a lift. The leg is already in the ledger, the row is intact,
         // and the next drain retries. Nothing here may mark it sent.
         coEvery { dao.findPending(any()) } returns listOf(queuedRow())
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.Undelivered("HTTP 503")
 
         val result = repo().drain()
@@ -267,14 +269,14 @@ class TransferOutboxRepositoryTest {
             queuedRow(),
             queuedRow(id = second),
         )
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.Undelivered("HTTP 503")
         coEvery { writer.markSent(any(), any(), any(), any()) } returns 1
 
         val result = repo().drain()
 
         // Both were attempted; the drain examined every row it was given.
-        coVerify(exactly = 2) { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 2) { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) }
         result.deferred shouldBe 2
     }
 
@@ -285,7 +287,7 @@ class TransferOutboxRepositoryTest {
             queuedRow(),
             queuedRow(id = second),
         )
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.Accepted
         coEvery { writer.markSent(any(), any(), any(), any()) } returns 1
 
@@ -301,7 +303,7 @@ class TransferOutboxRepositoryTest {
         // row. It must not then claim it published something, or the reported
         // total double-counts.
         coEvery { dao.findPending(any()) } returns listOf(queuedRow())
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.Accepted
         coEvery { writer.markSent(any(), any(), any(), any()) } returns 0
 
@@ -321,7 +323,7 @@ class TransferOutboxRepositoryTest {
         val result = repo().drain()
 
         result.deferred shouldBe 1
-        coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify { writer.recordFailure(correlationId, match { it.contains("no amount") }, any()) }
     }
 
@@ -349,8 +351,37 @@ class TransferOutboxRepositoryTest {
         val result = repo().drain()
 
         result.deferred shouldBe 1
-        coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { api.publishConfirmation(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a drained event carries the queued directory id on the wire unchanged`() = runTest {
+        // The point of the id is that it is the ONE identifier both ends agree
+        // on. A drain that reformatted it, or substituted a locally-derived one,
+        // would hand the receiver an id she cannot resolve and land her back in
+        // the exact bug the id exists to fix.
+        val destination = UUID.fromString("22222222-2222-2222-2222-222222222222")
+        coEvery { dao.findPending(any()) } returns listOf(queuedRow(toAccountId = destination))
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            TransferSyncApi.PublishResult.Accepted
+        coEvery { writer.markSent(any(), any(), any(), any()) } returns 1
+
+        val result = repo().drain()
+
+        result.published shouldBe 1
+        coVerify {
+            api.publishEvent(
+                correlationId = correlationId.toString(),
+                recordedBy = "owner",
+                amount = 500_000.0,
+                currency = "IDR",
+                occurredOn = "2026-10-05",
+                fromAccountName = "BCA",
+                toAccountName = "Mandiri",
+                toAccountId = destination.toString(),
+            )
+        }
     }
 
     @Test
@@ -359,7 +390,7 @@ class TransferOutboxRepositoryTest {
         // reformatted the date or renamed an account would send a transfer that
         // does not match what was recorded.
         coEvery { dao.findPending(any()) } returns listOf(queuedRow())
-        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
             TransferSyncApi.PublishResult.Accepted
         coEvery { writer.markSent(any(), any(), any(), any()) } returns 1
 
@@ -374,6 +405,9 @@ class TransferOutboxRepositoryTest {
                 occurredOn = "2026-10-05",
                 fromAccountName = "BCA",
                 toAccountName = "Mandiri",
+                // A row recorded before ids existed carries no id on the wire:
+                // omitted, not empty, exactly as [appendNullable] renders it.
+                toAccountId = null,
             )
         }
     }

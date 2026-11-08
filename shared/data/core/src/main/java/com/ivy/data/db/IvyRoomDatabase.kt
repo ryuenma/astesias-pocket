@@ -66,6 +66,7 @@ import com.ivy.data.db.migration.Migration134to135_PendingBills
 import com.ivy.data.db.migration.Migration135to136_TransferOutbox
 import com.ivy.data.db.migration.Migration136to137_TransferConfirmations
 import com.ivy.data.db.migration.Migration137to138_DirectoryAccountProfileKey
+import com.ivy.data.db.migration.Migration138to139_TransferOutboxToAccountId
 import com.ivy.domain.db.RoomTypeConverters
 import com.ivy.domain.db.migration.Migration105to106_TrnRecurringRules
 import com.ivy.domain.db.migration.Migration106to107_Wishlist
@@ -106,7 +107,7 @@ import com.ivy.domain.db.migration.Migration125to126_Tags
             spec = IvyRoomDatabase.DeleteSEMigration::class
         )
     ],
-    version = 138,
+    version = 139,
     exportSchema = true
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -186,7 +187,8 @@ abstract class IvyRoomDatabase : RoomDatabase() {
             Migration134to135_PendingBills(),
             Migration135to136_TransferOutbox(),
             Migration136to137_TransferConfirmations(),
-            Migration137to138_DirectoryAccountProfileKey()
+            Migration137to138_DirectoryAccountProfileKey(),
+            Migration138to139_TransferOutboxToAccountId()
         )
 
         /**

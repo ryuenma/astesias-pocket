@@ -49,7 +49,12 @@ class CrossProfileTransferPublisher @Inject constructor(
      *   key and the idempotency key, and deriving a second one here would break
      *   both.
      * @param fromAccountName his account, named because his id is not ours.
-     * @param toAccountName their account, named for the same reason.
+     * @param toAccountName the destination as the directory names it, sent for
+     *   devices whose rows predate [destinationAccountId].
+     * @param destinationAccountId the destination directory row's `accountId`,
+     *   carried on the wire so the receiver can place the transfer by id rather
+     *   than by name. Nullable because a very old caller may not have it - and a
+     *   transfer recorded without it still goes out, matched the legacy way.
      * @param occurredOn the calendar day, sent as an ISO date with no time. See
      *   [isoDate].
      * @return what the drain achieved, so a caller could report it. Nothing
@@ -62,6 +67,7 @@ class CrossProfileTransferPublisher @Inject constructor(
         amount: Double,
         currency: String,
         occurredOn: Instant,
+        destinationAccountId: UUID? = null,
     ): TransferOutboxRepository.DrainResult {
         val queued = outbox.enqueueEvent(
             correlationId = correlationId,
@@ -71,6 +77,7 @@ class CrossProfileTransferPublisher @Inject constructor(
             occurredOn = isoDate(occurredOn),
             fromAccountName = fromAccountName,
             toAccountName = toAccountName,
+            toAccountId = destinationAccountId,
             enqueuedAt = System.currentTimeMillis(),
         )
 
