@@ -109,11 +109,28 @@ class SettingsViewModel @Inject constructor(
      */
     private val unacknowledgedAnswersCount = mutableIntStateOf(0)
 
+    /**
+     * Bumped whenever the sync configuration changes.
+     *
+     * [uiState] reads `syncConfig` - a plain injected object, not Compose state -
+     * so signing in mutated the config while nothing in composition was
+     * invalidated, and the sync row kept rendering the pre-sign-in value
+     * ("Not connected") until the screen was rebuilt. Reading this counter in
+     * [uiState] subscribes the composition to the change; the counter is what
+     * makes a plain object behave like state.
+     */
+    private val syncRevision = mutableIntStateOf(0)
+
     @Composable
+    @Suppress("UNUSED_EXPRESSION")
     override fun uiState(): SettingsState {
         LaunchedEffect(Unit) {
             onStart()
         }
+
+        // A discarded read: this is what subscribes the composition to
+        // sync-config changes. See [syncRevision].
+        syncRevision.intValue
 
         return SettingsState(
             currencyCode = getCurrencyCode(),
@@ -387,6 +404,9 @@ class SettingsViewModel @Inject constructor(
         password: String
     ): DirectoryAuthApi.Result {
         val result = syncConfig.signIn(baseUrl, email, password)
+        // Even a failed attempt can rewrite the stored configuration, so the row
+        // must re-read it rather than only on success.
+        syncRevision.intValue++
         if (result.outcome == DirectoryAuthApi.Outcome.SUCCESS) {
             withContext(NonCancellable + dispatchersProvider.io) {
                 runCatching { directorySync.publishLocalAccounts() }
@@ -400,6 +420,7 @@ class SettingsViewModel @Inject constructor(
 
     fun disconnectSync() {
         syncConfig.clear()
+        syncRevision.intValue++
         runCatching { transferSyncScheduler.cancel() }
             .onFailure { Timber.e(it, "Could not cancel background transfer sync") }
     }
