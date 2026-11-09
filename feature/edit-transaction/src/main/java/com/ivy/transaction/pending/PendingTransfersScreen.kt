@@ -169,13 +169,12 @@ fun BoxWithConstraintsScope.PendingTransfersScreen(screen: PendingTransfersScree
             .fillMaxSize()
             .testTag("pending_transfers_screen")
     ) {
-        PendingTransfersModal(
-            visible = true,
+        PendingTransfersContent(
             items = viewModel.items,
             onAccept = { viewModel.accept(it) },
             onDecline = { viewModel.decline(it) },
-            // Done, the close control and the system back gesture all mean the
-            // same thing here: she has finished looking at the inbox.
+            // Done and the system back gesture both mean the same thing here:
+            // she has finished looking at the inbox.
             onDismiss = { nav.back() },
         )
     }

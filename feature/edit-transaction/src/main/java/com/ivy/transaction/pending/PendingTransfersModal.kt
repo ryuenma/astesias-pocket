@@ -1,14 +1,16 @@
 package com.ivy.transaction.pending
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -25,7 +27,6 @@ import com.ivy.design.l0_system.style
 import com.ivy.ui.R
 import com.ivy.wallet.ui.theme.Gradient
 import com.ivy.wallet.ui.theme.components.IvyBorderButton
-import com.ivy.wallet.ui.theme.modal.IvyModal
 import java.text.NumberFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -43,40 +44,39 @@ import java.time.format.DateTimeFormatter
  *
  * Accept and Decline are per-item, not per-screen: a batch action on money is a
  * footgun, and one transfer being wrong is a reason to decline that one transfer.
+ *
+ * This is a PAGE, not a bottom sheet, because it is a navigation destination
+ * (`AstesiaNavGraph` -> `PendingTransfersScreen`) rather than a transient overlay.
+ * Rendering it through `IvyModal` painted the modal scrim over an empty Box -
+ * `mediumBlur()` is a flat 95%-opaque colour and this repo contains no real blur
+ * modifier at all - which read as a blank grey wall above the sheet. That scrim is
+ * unparameterised inside `IvyModal`, and `IvyModal` is shared by every other modal
+ * in the app, so the fix belongs here and leaves the shared component untouched.
+ *
+ * ponytail: the file is still named ...Modal.kt from when this was a sheet.
+ * Renaming it would turn a one-screen fix into a delete/add pair for no
+ * behavioural gain; the name is the only stale part.
  */
 @Composable
-fun BoxScope.PendingTransfersModal(
-    visible: Boolean,
+fun PendingTransfersContent(
     items: List<PendingTransferEntity>,
     onAccept: (PendingTransferEntity) -> Unit,
     onDecline: (PendingTransferEntity) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    IvyModal(
-        id = null,
-        visible = visible,
-        dismiss = onDismiss,
-        shiftIfKeyboardShown = false,
-        // A real control in the actions row. This used to pass a 1dp Spacer,
-        // which left the row holding only the close X - and the empty state had
-        // no control of its own, so "Nothing to confirm" was a dead end with no
-        // labelled way out.
-        PrimaryAction = {
-            IvyBorderButton(
-                modifier = Modifier.testTag("pending_transfers_done"),
-                text = stringResource(R.string.done),
-                backgroundGradient = Gradient.solid(UI.colors.mediumInverse)
-            ) {
-                onDismiss()
-            }
-        },
-        // The list scrolls itself. Wrapping it in IvyModal's own ScrollState (the
-        // default) gave two nested vertical scrollers, and the 400dp spacer that
-        // used to sit below the list was compensating for the fight between them.
-        scrollState = null,
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            // Explicit surface rather than inheriting the host's: the backdrop
+            // behind a destination is not something this screen can assume, and
+            // `pureInverse` text needs `pure` under it.
+            .background(UI.colors.pure)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .testTag("pending_transfers_page")
     ) {
         Text(
-            modifier = Modifier.padding(start = 32.dp, end = 32.dp),
+            modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 24.dp),
             text = stringResource(R.string.pending_transfers_title),
             style = UI.typo.b1.style(
                 color = UI.colors.pureInverse,
@@ -95,15 +95,15 @@ fun BoxScope.PendingTransfersModal(
             ),
         )
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
 
         if (items.isEmpty()) {
-            NothingPending()
+            NothingPending(Modifier.weight(1f))
         } else {
+            // Fills the page rather than a fixed 420dp window: the sheet needed a
+            // bound so it could not grow past the screen, a page does not.
             LazyColumn(
-                // Bounded so a long inbox scrolls rather than growing the sheet
-                // past the top of the screen.
-                modifier = Modifier.heightIn(max = 420.dp)
+                modifier = Modifier.weight(1f)
             ) {
                 items(items, key = { it.correlationId.toString() }) { entry ->
                     PendingTransferRow(
@@ -114,13 +114,35 @@ fun BoxScope.PendingTransfersModal(
                 }
             }
         }
+
+        // The one labelled way out. On a page, Done and the system back gesture
+        // mean the same thing, so no second close control is needed.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IvyBorderButton(
+                modifier = Modifier.testTag("pending_transfers_done"),
+                text = stringResource(R.string.done),
+                backgroundGradient = Gradient.solid(UI.colors.mediumInverse),
+                textStyle = UI.typo.b2.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            ) {
+                onDismiss()
+            }
+        }
     }
 }
 
 @Composable
-private fun NothingPending() {
+private fun NothingPending(modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 32.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -200,7 +222,11 @@ private fun PendingTransferRow(
                     .weight(1f)
                     .testTag("pending_transfer_accept"),
                 text = stringResource(R.string.pending_transfer_accept),
-                backgroundGradient = Gradient.solid(UI.colors.mediumInverse)
+                backgroundGradient = Gradient.solid(UI.colors.mediumInverse),
+                textStyle = UI.typo.b2.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.ExtraBold
+                )
             ) {
                 onAccept()
             }
