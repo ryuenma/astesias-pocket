@@ -19,8 +19,8 @@ robolectric = "4.14.1"
 # Android
 min-sdk = "28"
 compile-sdk = "34"
-version-name = "2025.07.17"
-version-code = "206"
+version-name = "206.1-catto"
+version-code = "207"
 jvm-target = "17"
 
 
