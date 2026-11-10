@@ -39,9 +39,14 @@ class TransferSyncScheduler @Inject constructor(
             .addTag(WORK_TAG)
             .build()
 
+        // UPDATE, not KEEP. KEEP only preserves work that is still pending; once a
+        // Disconnect has CANCELLED this spec it stays cancelled forever, so a user
+        // who reconnects never gets background sync back. Observed: WorkSpec
+        // d6e7397d sat at state=CANCELLED with period_count=12 and never returned
+        // to ENQUEUED across cold starts.
         WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(
             UNIQUE_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             request,
         )
         Timber.i("TransferSyncWorker armed (every ${REPEAT_INTERVAL_MINUTES}m on network).")
