@@ -5,6 +5,12 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the app ask, once, to be left alone by Doze / app standby. Without
+         it the periodic transfer sync can be deferred indefinitely and an
+         incoming transfer sits unannounced until the app is opened - measured on
+         the MIUI POCOPHONE: the worker's job went 28 minutes past due with the
+         standby bucket on RARE and no notification for over five hours. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />

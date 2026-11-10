@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -32,6 +33,9 @@ import kotlinx.coroutines.launch
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
 import com.ivy.legacy.IvyWalletPreview
+import com.ivy.legacy.android.power.BatteryOptimisationState
+import com.ivy.legacy.android.power.batteryExemptionIntent
+import com.ivy.legacy.android.power.batteryOptimisationState
 import com.ivy.legacy.utils.selectEndTextFieldValue
 import com.ivy.ui.R
 import com.ivy.wallet.ui.theme.components.IvyOutlinedButton
@@ -260,6 +264,40 @@ fun BoxWithConstraintsScope.SyncServerModal(
                 )
             }
             Spacer(Modifier.height(16.dp))
+            // Background sync can be deferred indefinitely by Doze / app standby.
+            // Measured on this project's own test phone: the periodic worker's job
+            // sat 28 minutes past due on the RARE standby bucket and not one
+            // transfer was announced for over five hours, while every screen kept
+            // looking healthy. The app cannot run that work on the user's behalf,
+            // so it says so and offers the one control that exists.
+            val context = LocalContext.current
+            if (batteryOptimisationState(context) == BatteryOptimisationState.Restricted) {
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                        text = stringResource(R.string.sync_background_may_pause),
+                        style = UI.typo.nC.style(color = UI.colors.gray)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                IvyOutlinedButton(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp),
+                    text = stringResource(R.string.sync_background_allow),
+                    iconStart = null,
+                    borderColor = UI.colors.gray,
+                    textColor = UI.colors.gray,
+                    onClick = {
+                        // A device that answers this with nothing must not send the
+                        // user into a dead end; batteryExemptionIntent already
+                        // falls back to the optimiser list.
+                        runCatching { context.startActivity(batteryExemptionIntent(context)) }
+                    }
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+
             IvyOutlinedButton(
                 modifier = Modifier
                     .fillMaxWidth()
