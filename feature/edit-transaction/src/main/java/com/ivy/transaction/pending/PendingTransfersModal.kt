@@ -60,6 +60,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun PendingTransfersContent(
     items: List<PendingTransferEntity>,
+    undeliverableCount: Int = 0,
     onAccept: (PendingTransferEntity) -> Unit,
     onDecline: (PendingTransferEntity) -> Unit,
     onDismiss: () -> Unit,
@@ -113,6 +114,23 @@ fun PendingTransfersContent(
                     )
                 }
             }
+        }
+
+        // Money that arrived and could not be placed. Silent loss is the one
+        // outcome a transfer screen must never produce, so the count the pull
+        // already computes is shown rather than discarded.
+        if (undeliverableCount > 0) {
+            Text(
+                modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 8.dp),
+                text = stringResource(
+                    R.string.pending_transfers_undeliverable,
+                    undeliverableCount,
+                ),
+                style = UI.typo.c.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
         }
 
         // The one labelled way out. On a page, Done and the system back gesture

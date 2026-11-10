@@ -523,6 +523,7 @@
     <string name="decrease_loan">Kurangi</string>
     <string name="do_not_use_for_backup_purposes">⚠️ Tidak ditujukan untuk cadangan</string>
     <string name="done">Selesai</string>
+    <string name="pending_transfers_undeliverable">%1$d transfer tidak dapat ditempatkan \u2014 akun tujuannya sudah tidak ada di ponsel ini.</string>
     <string name="enter_with_offline_account">MASUK DENGAN AKUN OFFLINE</string>
     <string name="error">Kesalahan</string>
     <string name="exchange_rates">Nilai tukar</string>

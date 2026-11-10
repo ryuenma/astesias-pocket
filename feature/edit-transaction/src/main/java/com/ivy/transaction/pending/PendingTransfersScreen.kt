@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -42,6 +43,18 @@ class PendingTransfersViewModel @Inject constructor(
     val items: ImmutableList<PendingTransferEntity> get() = pending.value
 
     /**
+     * How many arriving transfers this device could not place.
+     *
+     * An unplaceable event is money that reached the server and then vanished
+     * here: the sender picked a directory account this wallet no longer holds,
+     * so `deliver()` refused to guess and dropped it. The pull already counts
+     * these; discarding the count is what made the loss silent.
+     */
+    private val undeliverable = mutableIntStateOf(0)
+
+    val undeliverableCount: Int get() = undeliverable.value
+
+    /**
      * Re-reads the inbox on entry, so the count Settings shows and the rows here
      * agree with what is actually in the table.
      *
@@ -57,8 +70,12 @@ class PendingTransfersViewModel @Inject constructor(
             // Best-effort throughout: an unreachable server must still open this
             // screen showing what was last known, because the whole point of it
             // is to let her act on money that is already in flight.
-            runCatching { eventSync.pullEvents() }
+            val pull = runCatching { eventSync.pullEvents() }
                 .onFailure { Timber.e(it, "Could not pull transfer events") }
+                .getOrNull()
+            // Keep the result instead of throwing it away: see [undeliverable].
+            undeliverable.intValue =
+                (pull as? TransferEventSync.PullResult.Pulled)?.undeliverable ?: 0
 
             // And publish whatever this device still owes the server, so an
             // answer given while offline reaches the other phone.
@@ -171,6 +188,7 @@ fun BoxWithConstraintsScope.PendingTransfersScreen(screen: PendingTransfersScree
     ) {
         PendingTransfersContent(
             items = viewModel.items,
+            undeliverableCount = viewModel.undeliverableCount,
             onAccept = { viewModel.accept(it) },
             onDecline = { viewModel.decline(it) },
             // Done and the system back gesture both mean the same thing here:
