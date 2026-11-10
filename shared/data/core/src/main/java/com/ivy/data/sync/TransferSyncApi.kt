@@ -116,6 +116,23 @@ class TransferSyncApi @Inject constructor(
          * produces [AlreadyPublished] rather than a second record.
          */
         data class Undelivered(val reason: String) : PublishResult
+
+        /**
+         * The server said NO, and it will say no again.
+         *
+         * The other half of the split above, and the distinction is what keeps
+         * the queue alive. A validation refusal, a 403 or a 422 is a statement
+         * about the body: nothing about waiting, retrying or reconnecting
+         * changes it. Retrying it forever is not safety - it is a row that
+         * holds a slot in every drain until the queue stops draining newer
+         * transfers at all.
+         *
+         * [Undelivered] and this were one value once, and conflating them meant
+         * either giving up on offline rows or never giving up on refused ones.
+         * There is no third option that works, so the type carries the
+         * difference and the counter only counts this one.
+         */
+        data class Rejected(val reason: String) : PublishResult
     }
 
     private val client: HttpClient by lazy {
@@ -351,6 +368,16 @@ class TransferSyncApi @Inject constructor(
                 PublishResult.AlreadyPublished
 
             status == HttpStatusCode.Conflict -> PublishResult.AlreadyPublished
+
+            // The server understood the request and refused it on its merits.
+            // Nothing about waiting, retrying or reconnecting changes the body,
+            // so this is counted rather than retried - see
+            // [PublishResult.Rejected]. 401 is deliberately NOT here: a token is
+            // renewable, and the same body succeeds once it is.
+            status == HttpStatusCode.BadRequest ||
+                status == HttpStatusCode.Forbidden ||
+                status == HttpStatusCode.UnprocessableEntity ->
+                PublishResult.Rejected("HTTP $status")
 
             else -> PublishResult.Undelivered("HTTP $status")
         }

@@ -59,26 +59,66 @@ interface WriteTransferOutboxDao {
     ): Int
 
     /**
-     * Records a failed attempt without giving up on the row.
+     * Records a TRANSIENT failure without giving up on the row.
      *
      * Deliberately does NOT change state: a phone that recorded a transfer in a
      * lift has to publish it when it gets signal, so a failure must leave the
-     * row PENDING. What it does change is [TransferOutboxEntity.attempts] and
-     * [TransferOutboxEntity.lastError], so a row that has failed forty times is
-     * distinguishable from one that has failed once, and a support question can
-     * be answered from the row rather than guessed at.
+     * row PENDING.
+     *
+     * Deliberately does NOT touch [TransferOutboxEntity.attempts] either. This
+     * method is for the "we do not know" class - offline, timeout, expired
+     * token, sync not configured - and every one of those heals itself. Counting
+     * them would walk a phone that queued transfers BEFORE signing in into a
+     * terminal state on transfers that were always going to publish. Only
+     * [recordRejection] counts, so the cap can only ever be reached by refusals
+     * the server will actually repeat.
      *
      * Guarded on PENDING for the same reason [markSent] is: a late failure from
      * a drain that lost a race must not annotate a row another drain already
      * sent, which would leave a published transfer looking broken.
      */
     @Query(
-        "UPDATE transfer_outbox SET attempts = attempts + 1, lastError = :error " +
+        "UPDATE transfer_outbox SET lastError = :error " +
             "WHERE correlationId = :correlationId AND state = :onlyIfState"
     )
     suspend fun recordFailure(
         correlationId: UUID,
         error: String,
+        onlyIfState: String = TransferOutboxEntity.STATE_PENDING,
+    ): Int
+
+    /**
+     * Records a PERMANENT refusal: the server said no and will say no again.
+     *
+     * Increments [TransferOutboxEntity.attempts], which is the give-up counter
+     * and nothing else, and leaves the state change to [markFailed] so the
+     * decision stays in Kotlin where it is testable - a `CASE` inside the SQL
+     * cannot be exercised on the JVM in this project, and an untested transition
+     * is not a transition anyone should trust with money.
+     */
+    @Query(
+        "UPDATE transfer_outbox SET attempts = attempts + 1, lastError = :error " +
+            "WHERE correlationId = :correlationId AND state = :onlyIfState"
+    )
+    suspend fun recordRejection(
+        correlationId: UUID,
+        error: String,
+        onlyIfState: String = TransferOutboxEntity.STATE_PENDING,
+    ): Int
+
+    /**
+     * Takes a permanently refused row out of the queue, without deleting it.
+     *
+     * Guarded on PENDING like every other transition here, so a rejection at the
+     * cap cannot overwrite a row a concurrent drain already published.
+     */
+    @Query(
+        "UPDATE transfer_outbox SET state = :state " +
+            "WHERE correlationId = :correlationId AND state = :onlyIfState"
+    )
+    suspend fun markFailed(
+        correlationId: UUID,
+        state: String = TransferOutboxEntity.STATE_FAILED,
         onlyIfState: String = TransferOutboxEntity.STATE_PENDING,
     ): Int
 

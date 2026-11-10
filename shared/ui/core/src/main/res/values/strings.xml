@@ -467,6 +467,7 @@
     <string name="do_not_use_for_backup_purposes">⚠\uFE0F Not intended for backup use</string>
     <string name="done">Done</string>
     <string name="pending_transfers_undeliverable">%1$d transfer(s) could not be placed \u2014 the account it was sent to no longer exists on this phone.</string>
+    <string name="pending_transfers_failed">%1$d transfer(s) could not be published \u2014 the server refused them and this phone has stopped trying.</string>
     <string name="contributors_number">%1$s Contributors</string>
     <string name="error">Error</string>
     <string name="loading">Loading…</string>

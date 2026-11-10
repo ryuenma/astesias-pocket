@@ -36,6 +36,7 @@ class TransferOutboxRepositoryTest {
         amount: Double? = 500_000.0,
         decision: String? = null,
         toAccountId: UUID? = null,
+        attempts: Int = 0,
     ) = TransferOutboxEntity(
         correlationId = id,
         kind = kind,
@@ -48,6 +49,7 @@ class TransferOutboxRepositoryTest {
         toAccountId = toAccountId,
         decision = decision,
         state = TransferOutboxEntity.STATE_PENDING,
+        attempts = attempts,
         enqueuedAt = 1_757_030_400_000L,
     )
 
@@ -259,6 +261,70 @@ class TransferOutboxRepositoryTest {
         coVerify { writer.recordFailure(correlationId, "HTTP 503", any()) }
     }
 
+    // -----------------------------------------------------------------
+    // Permanent refusals: the server said no, so it will say no again
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `a permanent refusal is counted, not merely retried`() = runTest {
+        // 400-validation, 403 and 422 are not "we do not know". The same row
+        // will be refused identically next time, so an unbounded retry is not
+        // safety - it is a row that owns a slot in every drain forever. It has
+        // to be COUNTED, and a transient network failure must not be.
+        coEvery { dao.findPending(any()) } returns listOf(queuedRow(attempts = 0))
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            TransferSyncApi.PublishResult.Rejected("HTTP 422")
+
+        val result = repo().drain()
+
+        result.rejected shouldBe 1
+        result.deferred shouldBe 0
+        coVerify { writer.recordRejection(correlationId, "HTTP 422") }
+        coVerify(exactly = 0) { writer.recordFailure(any(), any(), any()) }
+        coVerify(exactly = 0) { writer.markSent(any(), any(), any(), any()) }
+        // One refusal short of the cap: still retryable, so not terminal yet.
+        coVerify(exactly = 0) { writer.markFailed(any()) }
+    }
+
+    @Test
+    fun `a refusal at the cap is marked FAILED so it stops owning a batch slot`() = runTest {
+        // The starvation mechanism: findPending is ORDER BY enqueuedAt ASC
+        // LIMIT 25, so a permanently refused row keeps the head of the queue
+        // until something takes it out of PENDING. FAILED is that exit, and the
+        // row is kept rather than deleted because isOwnEvent() reads it.
+        coEvery { dao.findPending(any()) } returns
+            listOf(queuedRow(attempts = TransferOutboxEntity.MAX_REJECTIONS - 1))
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            TransferSyncApi.PublishResult.Rejected("HTTP 403")
+
+        val result = repo().drain()
+
+        result.rejected shouldBe 1
+        coVerify { writer.recordRejection(correlationId, "HTTP 403") }
+        coVerify { writer.markFailed(correlationId) }
+        coVerify(exactly = 0) { writer.markSent(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `a transient failure never counts toward the cap, however often it repeats`() = runTest {
+        // THE regression this split exists to prevent. Offline, timeout, an
+        // expired token and "sync not configured" all mean "we do not know yet",
+        // and a phone that queues transfers BEFORE signing in must not walk into
+        // a terminal state: there is an existing test proving that queueing
+        // without sync configured is supported. Counting these would have
+        // turned valid queued money permanently failed inside a day.
+        coEvery { dao.findPending(any()) } returns
+            listOf(queuedRow(attempts = TransferOutboxEntity.MAX_REJECTIONS + 40))
+        coEvery { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            TransferSyncApi.PublishResult.Undelivered("sign-in expired")
+
+        repeat(3) { repo().drain() }
+
+        coVerify(exactly = 3) { writer.recordFailure(correlationId, "sign-in expired", any()) }
+        coVerify(exactly = 0) { writer.recordRejection(any(), any()) }
+        coVerify(exactly = 0) { writer.markFailed(any()) }
+    }
+
     @Test
     fun `one undelivered row does not strand the rest of the queue`() = runTest {
         // A single transfer the server always refuses must not block every
@@ -322,9 +388,9 @@ class TransferOutboxRepositoryTest {
 
         val result = repo().drain()
 
-        result.deferred shouldBe 1
+        result.rejected shouldBe 1
         coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) }
-        coVerify { writer.recordFailure(correlationId, match { it.contains("no amount") }, any()) }
+        coVerify { writer.recordRejection(correlationId, match { it.contains("no amount") }) }
     }
 
     @Test
@@ -339,7 +405,7 @@ class TransferOutboxRepositoryTest {
 
         val result = repo().drain()
 
-        result.deferred shouldBe 1
+        result.rejected shouldBe 1
         coVerify(exactly = 0) { api.publishConfirmation(any(), any(), any()) }
     }
 
@@ -350,7 +416,7 @@ class TransferOutboxRepositoryTest {
 
         val result = repo().drain()
 
-        result.deferred shouldBe 1
+        result.rejected shouldBe 1
         coVerify(exactly = 0) { api.publishEvent(any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { api.publishConfirmation(any(), any(), any()) }
     }

@@ -38,6 +38,16 @@ interface TransferOutboxDao {
     @Query("SELECT COUNT(*) FROM transfer_outbox WHERE state = 'PENDING'")
     suspend fun countPending(): Int
 
+    /**
+     * How many transfers the server refused until this device stopped trying.
+     *
+     * Terminal rows are retained rather than deleted, so this counts history
+     * rather than a live queue - which is exactly what the sending-side warning
+     * needs to show: money that left this phone and never reached the other one.
+     */
+    @Query("SELECT COUNT(*) FROM transfer_outbox WHERE state = 'FAILED'")
+    suspend fun countFailed(): Int
+
     /** One row by its key, or null when this device never queued it. */
     @Query("SELECT * FROM transfer_outbox WHERE correlationId = :correlationId LIMIT 1")
     suspend fun findByCorrelationId(correlationId: UUID): TransferOutboxEntity?

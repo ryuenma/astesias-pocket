@@ -61,6 +61,7 @@ import java.time.format.DateTimeFormatter
 fun PendingTransfersContent(
     items: List<PendingTransferEntity>,
     undeliverableCount: Int = 0,
+    failedCount: Int = 0,
     onAccept: (PendingTransferEntity) -> Unit,
     onDecline: (PendingTransferEntity) -> Unit,
     onDismiss: () -> Unit,
@@ -125,6 +126,26 @@ fun PendingTransfersContent(
                 text = stringResource(
                     R.string.pending_transfers_undeliverable,
                     undeliverableCount,
+                ),
+                style = UI.typo.c.style(
+                    color = UI.colors.pureInverse,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+        }
+
+        // Money that left this phone and was refused by the server until the
+        // outbox stopped trying. Separate from the row above, which is money
+        // that ARRIVED and could not be placed: this one is the sending side, and
+        // it is the failure W17 was the receiving mirror of. Saying nothing here
+        // would make the give-up cap look exactly like the transfer never
+        // existing.
+        if (failedCount > 0) {
+            Text(
+                modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 8.dp),
+                text = stringResource(
+                    R.string.pending_transfers_failed,
+                    failedCount,
                 ),
                 style = UI.typo.c.style(
                     color = UI.colors.pureInverse,

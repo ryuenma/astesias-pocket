@@ -88,23 +88,25 @@ class TransferSyncApiClassifyTest {
     }
 
     @Test
-    fun `a 400 that is NOT a duplicate stays a failure`() {
+    fun `a 400 that is NOT a duplicate is PERMANENT but never a duplicate`() {
         // The dangerous neighbour. A validation failure for any other reason -
         // a missing required field, a bad amount - must NOT be read as "already
         // sent", or the transfer is discarded and the other phone never hears
-        // about money that left an account.
+        // about money that left an account. It is, however, permanent: the same
+        // body fails identically every time, so it is counted rather than
+        // retried forever.
         TransferSyncApi.classify(
             HttpStatusCode.BadRequest,
             """{"data":{"amount":{"code":"validation_invalid_number"}}}""",
-        ) shouldBe TransferSyncApi.PublishResult.Undelivered("HTTP 400 Bad Request")
+        ) shouldBe TransferSyncApi.PublishResult.Rejected("HTTP 400 Bad Request")
     }
 
     @Test
-    fun `a 400 with no body at all stays a failure`() {
+    fun `a 400 with no body at all is PERMANENT and not a duplicate`() {
         // Unparseable is not the same as duplicate. Guessing "duplicate" here
         // would silently drop the transfer.
         TransferSyncApi.classify(HttpStatusCode.BadRequest, null) shouldBe
-            TransferSyncApi.PublishResult.Undelivered("HTTP 400 Bad Request")
+            TransferSyncApi.PublishResult.Rejected("HTTP 400 Bad Request")
     }
 
     @Test
@@ -117,19 +119,33 @@ class TransferSyncApiClassifyTest {
         TransferSyncApi.classify(
             HttpStatusCode.BadRequest,
             """{"data":{"recordedBy":{"code":"validation_not_unique"}}}""",
-        ) shouldBe TransferSyncApi.PublishResult.Undelivered("HTTP 400 Bad Request")
+        ) shouldBe TransferSyncApi.PublishResult.Rejected("HTTP 400 Bad Request")
     }
 
     @Test
     fun `401 is a failure so the row is retried after signing in again`() {
+        // NOT a permanent refusal: the token is renewable, so the same body
+        // succeeds once the session is renewed. Counting this would make an
+        // ordinary expiry terminal.
         TransferSyncApi.classify(HttpStatusCode.Unauthorized, null) shouldBe
             TransferSyncApi.PublishResult.Undelivered("HTTP 401 Unauthorized")
     }
 
     @Test
-    fun `403 is a failure`() {
+    fun `403 is a PERMANENT refusal - a rule said no and will keep saying no`() {
+        // Was Undelivered, which retried a rule denial forever. A 403 means the
+        // record will be refused identically on every attempt, so it belongs to
+        // the counted class: one permanent refusal, then terminal after the cap.
         TransferSyncApi.classify(HttpStatusCode.Forbidden, null) shouldBe
-            TransferSyncApi.PublishResult.Undelivered("HTTP 403 Forbidden")
+            TransferSyncApi.PublishResult.Rejected("HTTP 403 Forbidden")
+    }
+
+    @Test
+    fun `422 is a PERMANENT refusal`() {
+        // The server understood the body and rejected the values in it. Nothing
+        // about a retry changes the values.
+        TransferSyncApi.classify(HttpStatusCode.UnprocessableEntity, null) shouldBe
+            TransferSyncApi.PublishResult.Rejected("HTTP 422 Unprocessable Entity")
     }
 
     @Test

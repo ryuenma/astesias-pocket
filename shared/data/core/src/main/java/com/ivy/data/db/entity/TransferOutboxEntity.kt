@@ -135,7 +135,16 @@ data class TransferOutboxEntity(
     /** PENDING until the server accepts it; SENT forever after. */
     val state: String,
 
-    /** Failed attempts so far. Diagnostics, and the backoff signal. */
+    /**
+     * Permanent refusals so far - the give-up counter, and nothing else.
+     *
+     * A transient failure (offline, timeout, expired token, sync not configured)
+     * does NOT increment this, because that class heals itself and counting it
+     * would make a phone that queued transfers before signing in terminal on
+     * money that was always going to publish. At
+     * [TransferOutboxEntity.MAX_REJECTIONS] the row leaves the PENDING queue as
+     * [TransferOutboxEntity.STATE_FAILED].
+     */
     val attempts: Int = 0,
 
     /** Why the last attempt failed, so a stuck row can be explained. */
@@ -159,6 +168,31 @@ data class TransferOutboxEntity(
 
         /** The server has it. Terminal and retained - see the class doc. */
         const val STATE_SENT = "SENT"
+
+        /**
+         * The server refused this row [MAX_REJECTIONS] times.
+         *
+         * Terminal and retained, exactly like [STATE_SENT]. A drain reads only
+         * [STATE_PENDING], so this is what takes a permanently refused row out
+         * of the batch. Without it such a row owns a slot in every drain
+         * forever, and since `findPending` is oldest-first and capped at 25,
+         * twenty-five of them stop every newer transfer being attempted at all.
+         *
+         * The row is NOT deleted. `isOwnEvent()` reads it, and a deletion would
+         * let our own published event return in the feed as a second, mirrored
+         * copy of a transfer already in the ledger.
+         */
+        const val STATE_FAILED = "FAILED"
+
+        /**
+         * Permanent refusals before a row becomes [STATE_FAILED].
+         *
+         * Only refusals the server will repeat count toward this - see
+         * [TransferOutboxEntity.attempts]. Five is enough that a rule deployed
+         * mid-sync is not mistaken for a permanent one, and small enough that a
+         * genuinely unacceptable row leaves the queue the same day.
+         */
+        const val MAX_REJECTIONS = 5
 
         /** The wire values of [decision]. An enum so no typo invents a third. */
         const val DECISION_ACCEPTED = "ACCEPTED"

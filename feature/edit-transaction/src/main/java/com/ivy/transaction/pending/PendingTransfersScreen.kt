@@ -55,6 +55,22 @@ class PendingTransfersViewModel @Inject constructor(
     val undeliverableCount: Int get() = undeliverable.value
 
     /**
+     * How many transfers this device accepted locally and then stopped trying to
+     * publish.
+     *
+     * A different failure from [undeliverable]: that one is money that ARRIVED
+     * and could not be placed, this one is money that left but never reached the
+     * server. The outbox gives up after
+     * [TransferOutboxEntity.MAX_REJECTIONS] permanent refusals so one bad row
+     * cannot own a slot in every drain, but giving up silently would just turn
+     * "retried forever" into "quietly abandoned". So the count is shown, and the
+     * transfer stays in the queue with its `lastError` for anyone diagnosing it.
+     */
+    private val failed = mutableIntStateOf(0)
+
+    val failedCount: Int get() = failed.value
+
+    /**
      * Re-reads the inbox on entry, so the count Settings shows and the rows here
      * agree with what is actually in the table.
      *
@@ -81,6 +97,13 @@ class PendingTransfersViewModel @Inject constructor(
             // answer given while offline reaches the other phone.
             runCatching { outbox.drain() }
                 .onFailure { Timber.e(it, "Could not drain the transfer outbox") }
+
+            // Read AFTER the drain: a refusal in this drain is exactly what can
+            // push a row over the cap, and the count must not lag a cycle behind
+            // the money it is reporting on.
+            failed.intValue = runCatching { outbox.failedCount() }
+                .onFailure { Timber.e(it, "Could not count failed transfers") }
+                .getOrDefault(failed.value)
 
             pending.value = runCatching {
                 repository.pending().toImmutableList()
@@ -189,6 +212,7 @@ fun BoxWithConstraintsScope.PendingTransfersScreen(screen: PendingTransfersScree
         PendingTransfersContent(
             items = viewModel.items,
             undeliverableCount = viewModel.undeliverableCount,
+            failedCount = viewModel.failedCount,
             onAccept = { viewModel.accept(it) },
             onDecline = { viewModel.decline(it) },
             // Done and the system back gesture both mean the same thing here:

@@ -130,6 +130,7 @@ class TransferOutboxRepository @Inject constructor(
         var published = 0
         var alreadyThere = 0
         var deferred = 0
+        var rejected = 0
 
         for (row in pending) {
             when (val result = publish(row)) {
@@ -167,22 +168,57 @@ class TransferOutboxRepository @Inject constructor(
                         "${row.kind} ${row.correlationId} stays queued: ${result.reason}"
                     )
                 }
+
+                is TransferSyncApi.PublishResult.Rejected -> {
+                    // The server refused the body and will refuse it identically
+                    // next time. Count it, and once it has been refused
+                    // [TransferOutboxEntity.MAX_REJECTIONS] times take it out of
+                    // PENDING - that is what stops it owning a slot in every
+                    // future drain. The count is decided here, from the row we
+                    // already hold, rather than in SQL where this project cannot
+                    // run a test for it.
+                    writer.recordRejection(row.correlationId, result.reason)
+                    rejected++
+                    if (row.attempts + 1 >= TransferOutboxEntity.MAX_REJECTIONS) {
+                        writer.markFailed(row.correlationId)
+                        Timber.w(
+                            "${row.kind} ${row.correlationId} refused " +
+                                "${row.attempts + 1} times; marked FAILED: ${result.reason}"
+                        )
+                    } else {
+                        Timber.w(
+                            "${row.kind} ${row.correlationId} refused " +
+                                "(${row.attempts + 1}/${TransferOutboxEntity.MAX_REJECTIONS}): " +
+                                result.reason
+                        )
+                    }
+                }
             }
         }
 
         Timber.i(
             "Outbox drain: $published published, $alreadyThere already there, " +
-                "$deferred deferred, ${pending.size} examined"
+                "$deferred deferred, $rejected rejected, ${pending.size} examined"
         )
         return DrainResult(
             published = published,
             alreadyThere = alreadyThere,
             deferred = deferred,
+            rejected = rejected,
         )
     }
 
     /** How much is still waiting. Drives an "N unsent" affordance. */
     suspend fun pendingCount(): Int = dao.countPending()
+
+    /**
+     * How many transfers this device stopped trying to publish.
+     *
+     * The companion to [pendingCount], and the honest half of the give-up cap:
+     * a row that leaves the PENDING queue without a count would look identical
+     * to a transfer that was never recorded at all.
+     */
+    suspend fun failedCount(): Int = dao.countFailed()
 
     /**
      * Whether this device is the one that recorded this transfer.
@@ -223,14 +259,14 @@ class TransferOutboxRepository @Inject constructor(
         // lie about money, so it is refused rather than defaulted.
         val amount = row.amount
         if (row.kind == TransferOutboxEntity.KIND_EVENT && amount == null) {
-            return TransferSyncApi.PublishResult.Undelivered("queued event has no amount")
+            return TransferSyncApi.PublishResult.Rejected("queued event has no amount")
         }
 
         // Same reasoning for an answer with no decision: the server field is a
         // select of exactly two values, and an empty string is not one of them.
         val decision = row.decision
         if (row.kind == TransferOutboxEntity.KIND_CONFIRMATION && decision == null) {
-            return TransferSyncApi.PublishResult.Undelivered("queued confirmation has no decision")
+            return TransferSyncApi.PublishResult.Rejected("queued confirmation has no decision")
         }
 
         return when (row.kind) {
@@ -254,10 +290,11 @@ class TransferOutboxRepository @Inject constructor(
                 decision = decision.orEmpty(),
             )
 
-            // An unknown kind is not published and not guessed at. Left PENDING
-            // with the reason recorded, which is diagnosable; interpreted, it
-            // would be untraceable.
-            else -> TransferSyncApi.PublishResult.Undelivered("unknown kind '${row.kind}'")
+            // An unknown kind is not published and not guessed at. Refused with
+            // the reason recorded, which is diagnosable; interpreted, it would be
+            // untraceable. Refused rather than deferred because an unknown kind
+            // will not become known by retrying it.
+            else -> TransferSyncApi.PublishResult.Rejected("unknown kind '${row.kind}'")
         }
     }
 
@@ -280,6 +317,14 @@ class TransferOutboxRepository @Inject constructor(
         val published: Int,
         val alreadyThere: Int,
         val deferred: Int,
+        /**
+         * Rows the server refused this round. Reported separately from
+         * [deferred] because the two say opposite things: a deferred row may
+         * publish next time and needs nothing from anyone, whereas a rejected
+         * row is being counted toward [TransferOutboxEntity.STATE_FAILED] and is
+         * money the owner will have to look at.
+         */
+        val rejected: Int = 0,
     ) {
         /** How many rows this device still owes the server after the drain. */
         val stillQueued: Int
@@ -287,7 +332,7 @@ class TransferOutboxRepository @Inject constructor(
 
         /** Whether everything examined made it to the server this time. */
         val complete: Boolean
-            get() = deferred == 0
+            get() = deferred == 0 && rejected == 0
     }
 
     private companion object {
